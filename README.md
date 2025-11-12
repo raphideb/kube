@@ -30,7 +30,7 @@ If any packages (curl, wget) are missing that are not covered by the install scr
    ```
    ./del_kube.sh
    ```
-  And then run the installation again.
+   And then run the installation again.
   
 3. Install Prometheus & Grafana
    ```
@@ -41,9 +41,10 @@ If any packages (curl, wget) are missing that are not covered by the install scr
    ./create_os.sh
    ```
 5. Deploy OpenSearch cluster (optional)
+   ```
    kubectl apply -f opensearch.yml
-
-6. In a second window, forward the ports for Grafana, Prometheus and Dashboards. If you did not deploy OpenSearch, you need to edit the file first and then execute:
+   ```
+7. In a second window, forward the ports for Grafana, Prometheus and Dashboards. If you did not deploy OpenSearch, you need to edit the file first and then execute:
    ```
    ./portfw.sh
    ```
