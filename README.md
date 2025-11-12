@@ -1,13 +1,13 @@
 # Scripts to setup a vanilla Kubernetes cluster in WSL
 ## Description
 These scripts are used to setup the following:
-1. Helm and Docker and cri-docker
+1. Helm and Docker with cri-docker
 2. Kubernetes cluster with persistent storage and Calico networking
-3. Cloudnativepg operator with cnpg plugin and deployment of a sample DB
-4. mongodb operator and deployment of a sample DB
-5. opensearch operator
-6. prometheus
-7. grafana
+3. CloudNative-PG operator with cnpg plugin and deployment of a sample DB
+4. MongoDB operator and deployment of a sample DB
+5. OpenSearch operator
+6. Prometheus
+7. Grafana
 
 Plus yaml files for deploying:
 - postgres cluster with grafana support 
@@ -94,6 +94,8 @@ mongosh -u raphi mongodb://localhost:27017/raphi-db
 ### Grafana
 Open a webbrowser and type in: https://localhost:3000
 user and pass is: admin
+
+After login, go to "Dashboards -> New -> Import" and enter this id for a really nice PG Dashboard: 20417
 
 ### OpenSearch
 Open a webbrowser and type in: https://localhost:5601
