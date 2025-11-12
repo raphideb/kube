@@ -107,4 +107,9 @@ You are prompted to set a new password then.
 Tip: load some sample data after you logged in, for example flight data.
 
 
-## 
+## Dashboards
+### OpenSearch
+<img width="3839" height="2159" alt="opensearch" src="https://github.com/user-attachments/assets/a4a3b640-1a94-4f0b-b65b-656ad584448e" />
+
+### Grafana
+<img width="3839" height="2159" alt="grafana" src="https://github.com/user-attachments/assets/8492632b-240e-47bb-afee-df10d5bce5e8" />
