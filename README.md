@@ -48,6 +48,12 @@ If any packages (curl, wget) are missing that are not covered by the install scr
    ```
    ./portfw.sh
    ```
+### Start Kubernetes
+If you shutdown wsl and start it again, you need to also start kubernetes again. The following script does that, you can also create a systemctl service if you like:
+```
+./start_kube.sh
+```
+
 ## Deploy more clusters
 By this point you already have a sample postgres and mongodb deployed, including grafana for PG. To deploy another mongodb or postgres DB, simply run:
 ```
@@ -106,10 +112,41 @@ You are prompted to set a new password then.
 
 Tip: load some sample data after you logged in, for example flight data.
 
-
 ## Dashboards
 ### OpenSearch
 <img width="3839" height="2159" alt="opensearch" src="https://github.com/user-attachments/assets/a4a3b640-1a94-4f0b-b65b-656ad584448e" />
 
 ### Grafana
 <img width="3839" height="2159" alt="grafana" src="https://github.com/user-attachments/assets/8492632b-240e-47bb-afee-df10d5bce5e8" />
+
+## Troubleshooting
+### prometheus node exporter
+If the node export pod keeps crashing, check the log files:
+```
+raphi@plexus:~$ kubectl get pods -n monitoring |grep node-exporter
+kube-prometheus-stack-prometheus-node-exporter-xbzrm        0/1     CrashLoopBackOff   24 (51s ago)   29h
+raphi@plexus:~$ kubectl describe pods -n monitoring kube-prometheus-stack-prometheus-node-exporter-xbzrm
+```
+If you see lines like this one:
+```
+Warning  Failed          39s (x2 over 80s)    kubelet  Error: failed to start container "node-exporter": Error response from daemon: path / is mounted on / but it is not a shared or slave mount
+```
+Apply the following patch:
+```
+kubectl patch daemonset kube-prometheus-stack-prometheus-node-exporter -n monitoring --type=json -p='[{"op": "remove", "path": "/spec/template/spec/containers/0/volumeMounts/2/mountPropagation"}]'
+```
+This should fix the issue and the pod should be running.
+
+### grafana
+My grafana pod crashed after a while and kubectl describe show this message: 
+```
+Warning  BackOff  2m36s (x532 over 117m)  kubelet  Back-off restarting failed container init-chown-data in pod kube-prometheus-stack-grafana
+```
+If this happens, chmod the PV directories (they are always 777):
+```
+sudo chmod -R 777 /opt/local-path-provisioner/pvc-*
+```
+You might need to delete the pod afterwards, a new one will automatically be created:
+```
+kubectl delete pod -n monitoring kube-prometheus-stack-grafana-845f8c6c46-jqn6k
+```
