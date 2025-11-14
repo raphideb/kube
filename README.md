@@ -173,6 +173,7 @@ The original Oracle dashboard lets you select databases only by host ip. I modif
 ```
 OracleDB_Grafana.json
 ```
+![oracle_grafana](https://github.com/user-attachments/assets/6e2a3b2d-1267-4a55-bb8a-8bd96483b1e6)
 
 ## Troubleshooting
 ### prometheus node exporter
