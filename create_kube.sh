@@ -320,6 +320,8 @@ if ! helm list -n postgres | grep -q cnpg-operator; then
     sleep 15
     kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=cloudnative-pg -n postgres --timeout=180s
     echo "CloudNativePG operator installed."
+    echo "Installing cnpg plugin"
+    curl -sSfL https://github.com/cloudnative-pg/cloudnative-pg/raw/main/hack/install-cnpg-plugin.sh | sudo sh -s -- -b /usr/local/bin
 else
     echo "CloudNativePG operator already installed."
 fi
