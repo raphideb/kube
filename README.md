@@ -5,14 +5,18 @@ These scripts are used to setup the following:
 2. Kubernetes cluster with persistent storage and Calico networking
 3. CloudNative-PG operator with cnpg plugin and deployment of a sample DB
 4. MongoDB operator and deployment of a sample DB
-5. OpenSearch operator
-6. Prometheus
-7. Grafana
+5. Oracle operator and deployment of a sample DB
+6. OpenSearch operator
+7. Prometheus
+8. Grafana
 
 Plus yaml files for deploying:
 - postgres cluster with grafana support 
 - mongodb cluster (will add grafana later)
 - opensearch cluster with dashboard
+
+And deploy scripts for:
+- oracle23 free edition with grafana support
 
 **Important**
 When everything is running, on my machine WSL uses over 16GB of memory and swap needs to be disabled. If this is too much for your machine, consider using k3d or kind. 
@@ -44,10 +48,15 @@ If any packages (curl, wget) are missing that are not covered by the install scr
    ```
    kubectl apply -f opensearch.yml
    ```
+6. Deploy Oracle (optional)
+   ```
+   ./create_oracle.sh
+   ```
 7. In a second window, forward the ports for Grafana, Prometheus and Dashboards. If you did not deploy OpenSearch, you need to edit the file first and then execute:
    ```
    ./portfw.sh
    ```
+   You *could* also add the ports for the oracle databases but they are randomly assigned during creation. I prefer accessing them through kubectl.
 ### Start Kubernetes
 If you shutdown wsl and start it again, you need to also start kubernetes again. The following script does that, you can also create a systemctl service if you like:
 ```
@@ -69,18 +78,29 @@ If you already have local WSL installation of mongodb or postgres, change the de
 ```
 kubectl port-forward -n postgres svc/pg-raphi-rw 54320:5432 &
 ```
+### Deploy more oracle databases
+For oracle, additional steps are needed to setup the credentials and proper labeling for grafana, which is why a bash script is more suitable. Basic usage is:
+```
+./deploy-oracle.sh <db-name> <sid> <password>
+```
+However the sid has to be FREE for the free edition. Example:
+```
+./deploy-oracle.sh raphiora FREE MySecret_123
+```
+
 ## Access
 All pods can be directly accessed with kubectl. First get a list of your pods:
 ```
 kubectl get pods -n postgres
 kubectl get pods -n mongodb
 kubectl get pods -n opensearch
+kubectl get pods -n oracle
 ```
 And then login with:
 ```
 kubectl exec -it pg-raphi-1 -n postgres -- bash
 kubectl exec -it raphi-mongodb-0 -n mongodb -- bash
-kubectl exec -it opensearch-cluster-nodes-0 -n opensearch -- bash
+kubectl exec -it raphiora-z9e4b -n oracle -- sqlplus sys/MySecret_123@FREE as sysdba
 ```
 ### Postgres
 The easiest way to connect to postgres is through cnpg plugin:
@@ -96,6 +116,28 @@ psql -h localhost -p 54320 -U postgres postgres
 With mongosh, password is in mongodb.yml if you haven't changed it yet:
 ```
 mongosh -u raphi mongodb://localhost:27017/raphi-db
+```
+
+### Oracle
+The easiest way to connect to oracle is to use the script "orasql" in this repo, if the database was deployed with "deploy-oracle.sh":
+```
+./orasql
+Usage: orasql <database-name> [namespace]
+
+Available databases:
+oracle23    Healthy   FREE
+raphiora    Healthy   FREE
+```
+Example:
+```
+./orasql raphiora
+```
+
+Alternatively, you can list the available databases, get the corresponding pod and login with password on the commandline:
+```
+kubectl get singleinstancedatabase -n oracle
+kubectl get pods -n oracle -l app=raphiora -o jsonpath='{.items[0].metadata.name}'
+kubectl exec -it raphiora-z9e4b -n oracle -- sqlplus sys/HomePW_12345@FREE as sysdba
 ```
 
 ### Grafana
@@ -117,7 +159,20 @@ Tip: load some sample data after you logged in, for example flight data.
 <img width="3839" height="2159" alt="opensearch" src="https://github.com/user-attachments/assets/a4a3b640-1a94-4f0b-b65b-656ad584448e" />
 
 ### Grafana
+#### PostgresSQL
+Name: CloudNativePG  
+Dashboard ID: 20417
+
 <img width="3839" height="2159" alt="grafana" src="https://github.com/user-attachments/assets/8492632b-240e-47bb-afee-df10d5bce5e8" />
+
+### Oracle
+Name: OracleDB Monitoring - performance and table space stats  
+Original dashboard ID: 13555
+
+The original Oracle dashboard lets you select databases only by host ip. I modified it to be able to select by database name. Import this file into grafana from the repo:
+```
+OracleDB_Grafana.json
+```
 
 ## Troubleshooting
 ### prometheus node exporter
