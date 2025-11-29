@@ -117,25 +117,36 @@ else
 fi
 
 echo ""
-echo -e "${GREEN}Step 5: Configuring kubelet to allow swap...${NC}"
+echo -e "${GREEN}Step 5: Preparing kubeadm configuration for swap...${NC}"
 # Note: Swap is NOT disabled on this system to preserve system functionality
-# Instead, we configure kubelet to allow swap with memory limits
-sudo mkdir -p /etc/systemd/system/kubelet.service.d
-sudo bash -c 'cat > /etc/systemd/system/kubelet.service.d/11-swap.conf <<EOF
-[Service]
-Environment="KUBELET_EXTRA_ARGS=--fail-swap-on=false"
-EOF'
-echo "Kubelet configured to allow swap."
+# Instead, we configure kubelet to allow swap via kubeadm config
+cat > /tmp/kubeadm-config.yaml <<EOF
+apiVersion: kubeadm.k8s.io/v1beta4
+kind: InitConfiguration
+nodeRegistration:
+  criSocket: unix:///var/run/cri-dockerd.sock
+  ignorePreflightErrors:
+    - NumCPU
+    - Mem
+    - Swap
+---
+apiVersion: kubeadm.k8s.io/v1beta4
+kind: ClusterConfiguration
+networking:
+  podSubnet: ${POD_CIDR}
+---
+apiVersion: kubelet.config.k8s.io/v1beta1
+kind: KubeletConfiguration
+failSwapOn: false
+EOF
+echo "Kubeadm configuration created with swap support."
 
 echo ""
 echo -e "${GREEN}Step 6: Initializing Kubernetes cluster...${NC}"
 if [ ! -f /etc/kubernetes/admin.conf ]; then
     sudo kubeadm config images pull --cri-socket unix:///var/run/cri-dockerd.sock
 
-    sudo kubeadm init \
-        --pod-network-cidr=${POD_CIDR} \
-        --cri-socket unix:///var/run/cri-dockerd.sock \
-        --ignore-preflight-errors=NumCPU,Mem,Swap
+    sudo kubeadm init --config /tmp/kubeadm-config.yaml
 
     mkdir -p $HOME/.kube
     sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
