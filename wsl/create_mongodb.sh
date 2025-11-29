@@ -121,6 +121,33 @@ EOF
 
 echo "MongoDB cluster deployment initiated."
 
+# Step 5: Configure monitoring if installed
+echo ""
+echo -e "${GREEN}Step 5: Configuring monitoring (if installed)...${NC}"
+if kubectl get crd podmonitors.monitoring.coreos.com &> /dev/null; then
+    cat <<EOF | kubectl apply -f -
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: mongodb-cluster-monitor
+  namespace: mongodb
+  labels:
+    app: mongodb
+spec:
+  selector:
+    matchLabels:
+      app: mongodb-cluster-svc
+  podMetricsEndpoints:
+  - port: prometheus
+    path: /metrics
+EOF
+    echo "MongoDB monitoring configured."
+    echo "  - Cluster PodMonitor created"
+else
+    echo -e "${YELLOW}Warning: Monitoring stack not installed. Metrics collection disabled.${NC}"
+    echo -e "${YELLOW}Install monitoring with ./create_mon.sh to enable metrics collection.${NC}"
+fi
+
 echo ""
 echo -e "${GREEN}========================================${NC}"
 echo -e "${GREEN}MongoDB Deployment Complete!${NC}"
@@ -137,4 +164,20 @@ echo ""
 echo -e "${YELLOW}Monitor cluster status:${NC}"
 echo "  kubectl get mongodb -n mongodb -w"
 echo ""
+
+# Add Grafana dashboard info if monitoring is installed
+if kubectl get crd podmonitors.monitoring.coreos.com &> /dev/null; then
+    echo -e "${YELLOW}Grafana Dashboards:${NC}"
+    echo "  1. Access Grafana (if not already running):"
+    echo "     kubectl port-forward svc/kube-prometheus-stack-grafana -n monitoring 3000:80"
+    echo ""
+    echo "  2. In Grafana, go to Dashboards > Import"
+    echo "  3. Choose one of these MongoDB dashboards:"
+    echo "     - Dashboard ID: 2583 (MongoDB Overview)"
+    echo "     - Dashboard ID: 7353 (MongoDB Exporter)"
+    echo "     - Dashboard ID: 12079 (MongoDB)"
+    echo "  4. Select Prometheus datasource and click Import"
+    echo ""
+fi
+
 exit 0

@@ -112,17 +112,69 @@ spec:
   replicas: 1
 EOF
 
-# Step 10: create credentials
-POD_NAME=$(kubectl get pods -n oracle -l app=oracle23 -o jsonpath='{.items[0].metadata.name}')
-SVC_NAME=$(kubectl get svc -n oracle oracle23 -o jsonpath='{.metadata.name}')
+# Step 10: Create credentials for monitoring
+echo -e "\n${YELLOW}[10/10] Configuring monitoring...${NC}"
 
 # Create a comprehensive secret for the observer
-kubectl create secret generic oracle-observer-credentials \
+kubectl create secret generic ${DB_NAME}-observer-credentials \
   --from-literal=username=system \
   --from-literal=password=${DB_PASSWORD} \
   --from-literal=connection_string="${DB_NAME}:1521/FREE" \
   -n oracle \
   --dry-run=client -o yaml | kubectl apply -f -
+
+# Deploy DatabaseObserver and ServiceMonitor if monitoring is installed
+if kubectl get crd servicemonitors.monitoring.coreos.com &> /dev/null; then
+    cat <<EOF | kubectl apply -f -
+apiVersion: observability.oracle.com/v1alpha1
+kind: DatabaseObserver
+metadata:
+  name: ${DB_NAME}-observer
+  namespace: ${NAMESPACE}
+  labels:
+    database: ${DB_NAME}
+spec:
+  database:
+    dbUser:
+      secret: ${DB_NAME}-observer-credentials
+      key: username
+    dbPassword:
+      secret: ${DB_NAME}-observer-credentials
+      key: password
+    dbConnectionString:
+      secret: ${DB_NAME}-observer-credentials
+      key: connection_string
+  replicas: 1
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: ${DB_NAME}-metrics
+  namespace: ${NAMESPACE}
+  labels:
+    app: ${DB_NAME}-observer
+    database: ${DB_NAME}
+spec:
+  selector:
+    matchLabels:
+      app: ${DB_NAME}-observer
+  endpoints:
+  - port: metrics
+    interval: 30s
+    path: /metrics
+    relabelings:
+    - targetLabel: database
+      replacement: ${DB_NAME}
+    - sourceLabels: [__meta_kubernetes_namespace]
+      targetLabel: namespace
+EOF
+    echo "Oracle monitoring configured."
+    echo "  - DatabaseObserver created"
+    echo "  - ServiceMonitor created"
+else
+    echo -e "${YELLOW}Warning: Monitoring stack not installed. Metrics collection disabled.${NC}"
+    echo -e "${YELLOW}Install monitoring with ./create_mon.sh to enable metrics collection.${NC}"
+fi
 
 echo -e "\n${GREEN}=== Installation Complete ===${NC}"
 echo ""
@@ -141,4 +193,18 @@ echo ""
 echo "View logs:"
 echo "  POD_NAME=\$(kubectl get pods -n ${NAMESPACE} -l app=${DB_NAME} -o jsonpath='{.items[0].metadata.name}')"
 echo "  kubectl logs -f \$POD_NAME -n ${NAMESPACE}"
+echo ""
+
+# Add Grafana dashboard info if monitoring is installed
+if kubectl get crd servicemonitors.monitoring.coreos.com &> /dev/null; then
+    echo -e "${YELLOW}Grafana Dashboard:${NC}"
+    echo "  1. Access Grafana (if not already running):"
+    echo "     kubectl port-forward svc/kube-prometheus-stack-grafana -n monitoring 3000:80"
+    echo ""
+    echo "  2. Import the Oracle dashboard from this repository:"
+    echo "     In Grafana, go to Dashboards > Import"
+    echo "     Upload the file: OracleDB_Grafana.json"
+    echo "     (Modified version of dashboard 13555 with database name selection)"
+    echo ""
+fi
 

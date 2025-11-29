@@ -409,25 +409,6 @@ spec:
   storage:
     size: ${PG_STORAGE}
     storageClass: local-path
----
-apiVersion: monitoring.coreos.com/v1
-kind: PodMonitor
-metadata:
-  name: postgres-cluster
-  namespace: postgres
-  labels:
-    cnpg.io/cluster: postgres-cluster
-spec:
-  namespaceSelector:
-    matchNames:
-    - postgres
-  selector:
-    matchLabels:
-      cnpg.io/cluster: postgres-cluster
-  podMetricsEndpoints:
-  - port: metrics
-    path: /metrics
-    interval: 30s
 EOF
 
 echo "PostgreSQL cluster deployment initiated. Use 'kubectl get clusters -n postgres' to monitor."

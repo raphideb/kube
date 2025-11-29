@@ -42,25 +42,19 @@ This assumes that you have a working WSL/Debian installation and that you have d
 If any packages (curl, wget) are missing that are not covered by the install script, install them manually.
 
 ### Option 1: Modular Installation (Recommended)
-This approach allows you to install components separately:
 
-1. **Setup Kubernetes cluster**
-   ```
-   ./create_kube.sh
-   ```
-   This installs Docker, cri-dockerd, Kubernetes components, Calico CNI, local-path-provisioner, and Helm.
+**Recommended Order:**
 
-2. **Deploy PostgreSQL (optional)**
-   ```
-   ./create_pg.sh
-   ```
-   This installs the CloudNativePG operator and deploys a PostgreSQL cluster.
+```bash
+./create_kube.sh    # 1. Setup Kubernetes
+./create_mon.sh     # 2. Install Prometheus & Grafana (optional but recommended)
+./create_pg.sh      # 3. Deploy PostgreSQL (auto-configures monitoring if available)
+./create_mongodb.sh # 4. Deploy MongoDB (auto-configures monitoring if available)
+./create_oracle.sh  # 5. Deploy Oracle (auto-configures monitoring if available)
+./create_os.sh      # 6. Install OpenSearch operator
+```
 
-3. **Deploy MongoDB (optional)**
-   ```
-   ./create_mongodb.sh
-   ```
-   This installs the MongoDB operator and deploys a MongoDB cluster.
+**Note:** Scripts work in any order. Each database script auto-configures its own monitoring if the monitoring stack is installed.
 
 ### Option 2: All-in-One Installation
 If you want to install everything at once (Kubernetes + PostgreSQL + MongoDB):
@@ -76,33 +70,28 @@ You might (probably will) run into problems that you need to figure out - best w
    And then run the installation again.
 
 ### Additional Components
-4. **Install Prometheus & Grafana**
-   ```
-   ./create_mon.sh
-   ```
-5. **Install OpenSearch operator (optional)**
-   ```
-   ./create_os.sh
-   ```
-6. **Deploy OpenSearch cluster (optional)**
-   ```
-   kubectl apply -f opensearch.yml
-   ```
-7. **Deploy Oracle (optional)**
-   ```
-   ./create_oracle.sh
-   ```
-   If you want to delete everything from Oracle, run:
-   ```
-   ./del_oracle.sh
-   ```
-8. **Port Forwarding**
 
-   In a second window, forward the ports for Grafana, Prometheus and Dashboards. If you did not deploy OpenSearch, you need to edit the file first and then execute:
-   ```
-   ./portfw.sh
-   ```
-   You *could* also add the ports for the oracle databases but they are randomly assigned during creation. I prefer accessing them through kubectl.
+**Deploy OpenSearch cluster (optional)**
+
+```
+kubectl apply -f opensearch.yml
+```
+
+**Delete Oracle deployment**
+
+```
+./del_oracle.sh
+```
+
+**Port Forwarding**
+
+In a second window, forward the ports for Grafana, Prometheus and Dashboards. If you did not deploy OpenSearch, you need to edit the file first and then execute:
+
+```
+./portfw.sh
+```
+
+You *could* also add the ports for the oracle databases but they are randomly assigned during creation. I prefer accessing them through kubectl.
 ### Start Kubernetes
 If you shutdown wsl and start it again, you need to also start kubernetes again. The following script does that, you can also create a systemctl service if you like:
 ```

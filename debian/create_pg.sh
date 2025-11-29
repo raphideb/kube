@@ -82,7 +82,16 @@ spec:
   storage:
     size: ${PG_STORAGE}
     storageClass: local-path
----
+EOF
+
+echo "PostgreSQL cluster deployment initiated."
+
+# Step 4: Configure monitoring if installed
+echo ""
+echo -e "${GREEN}Step 4: Configuring monitoring (if installed)...${NC}"
+if kubectl get crd podmonitors.monitoring.coreos.com &> /dev/null; then
+    # Create PodMonitor for the PostgreSQL cluster
+    cat <<EOF | kubectl apply -f -
 apiVersion: monitoring.coreos.com/v1
 kind: PodMonitor
 metadata:
@@ -103,7 +112,30 @@ spec:
     interval: 30s
 EOF
 
-echo "PostgreSQL cluster deployment initiated."
+    # Create PodMonitor for the CloudNativePG operator
+    cat <<EOF | kubectl apply -f -
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: cnpg-operator
+  namespace: postgres
+  labels:
+    app.kubernetes.io/name: cloudnative-pg
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: cloudnative-pg
+  podMetricsEndpoints:
+  - port: metrics
+EOF
+
+    echo "PostgreSQL monitoring configured."
+    echo "  - Cluster PodMonitor created"
+    echo "  - Operator PodMonitor created"
+else
+    echo -e "${YELLOW}Warning: Monitoring stack not installed. Metrics collection disabled.${NC}"
+    echo -e "${YELLOW}Install monitoring with ./create_mon.sh to enable metrics collection.${NC}"
+fi
 
 echo ""
 echo -e "${GREEN}========================================${NC}"
@@ -122,4 +154,17 @@ echo ""
 echo -e "${YELLOW}Monitor cluster status:${NC}"
 echo "  kubectl get clusters -n postgres -w"
 echo ""
+
+# Add Grafana dashboard info if monitoring is installed
+if kubectl get crd podmonitors.monitoring.coreos.com &> /dev/null; then
+    echo -e "${YELLOW}Grafana Dashboard:${NC}"
+    echo "  1. Access Grafana (if not already running):"
+    echo "     kubectl port-forward svc/kube-prometheus-stack-grafana -n monitoring 3000:80"
+    echo ""
+    echo "  2. In Grafana, go to Dashboards > Import"
+    echo "  3. Enter dashboard ID: 20417 (CloudNativePG)"
+    echo "  4. Select Prometheus datasource and click Import"
+    echo ""
+fi
+
 exit 0

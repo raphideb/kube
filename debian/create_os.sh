@@ -96,4 +96,29 @@ echo -e "${YELLOW}Access Dashboards:${NC}"
 echo "  kubectl port-forward -n opensearch svc/my-opensearch-cluster-dashboards 5601:5601"
 echo "  Open http://localhost:5601"
 echo ""
+
+# Add monitoring info if monitoring stack is installed
+if kubectl get crd servicemonitors.monitoring.coreos.com &> /dev/null; then
+    echo -e "${YELLOW}Prometheus Monitoring:${NC}"
+    echo "  OpenSearch exposes Prometheus metrics on the /_prometheus endpoint"
+    echo "  To enable monitoring for your cluster, add a ServiceMonitor after deployment:"
+    echo ""
+    echo "  kubectl apply -f - <<EOF"
+    echo "  apiVersion: monitoring.coreos.com/v1"
+    echo "  kind: ServiceMonitor"
+    echo "  metadata:"
+    echo "    name: opensearch-metrics"
+    echo "    namespace: opensearch"
+    echo "  spec:"
+    echo "    selector:"
+    echo "      matchLabels:"
+    echo "        app: opensearch-cluster  # Update to match your cluster name"
+    echo "    endpoints:"
+    echo "    - port: http"
+    echo "      path: /_prometheus/metrics"
+    echo "      interval: 30s"
+    echo "  EOF"
+    echo ""
+fi
+
 exit 0

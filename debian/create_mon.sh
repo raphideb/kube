@@ -100,69 +100,14 @@ else
     echo "kube-prometheus-stack already installed."
 fi
 
-# Step 4: Enable monitoring for CloudNativePG
+# Step 4: Get Grafana admin password
 echo ""
-echo -e "${GREEN}Step 4: Enabling monitoring for PostgreSQL cluster...${NC}"
-if kubectl get cluster postgres-cluster -n postgres &> /dev/null; then
-    kubectl patch cluster postgres-cluster -n postgres --type=merge -p '
-spec:
-  monitoring:
-    enablePodMonitor: true
-'
-    echo "PostgreSQL monitoring enabled."
-else
-    echo -e "${YELLOW}Warning: postgres-cluster not found, skipping.${NC}"
-fi
-
-# Step 5: Create PodMonitor for MongoDB
-echo ""
-echo -e "${GREEN}Step 5: Creating PodMonitor for MongoDB...${NC}"
-cat <<EOF | kubectl apply -f -
-apiVersion: monitoring.coreos.com/v1
-kind: PodMonitor
-metadata:
-  name: mongodb-cluster-monitor
-  namespace: mongodb
-  labels:
-    app: mongodb
-spec:
-  selector:
-    matchLabels:
-      app: mongodb-cluster-svc
-  podMetricsEndpoints:
-  - port: prometheus
-    path: /metrics
-EOF
-echo "MongoDB PodMonitor created."
-
-# Step 6: Create PodMonitor for CloudNativePG Operator
-echo ""
-echo -e "${GREEN}Step 6: Creating PodMonitor for CloudNativePG operator...${NC}"
-cat <<EOF | kubectl apply -f -
-apiVersion: monitoring.coreos.com/v1
-kind: PodMonitor
-metadata:
-  name: cnpg-operator
-  namespace: postgres
-  labels:
-    app.kubernetes.io/name: cloudnative-pg
-spec:
-  selector:
-    matchLabels:
-      app.kubernetes.io/name: cloudnative-pg
-  podMetricsEndpoints:
-  - port: metrics
-EOF
-echo "CNPG operator PodMonitor created."
-
-# Step 7: Get Grafana admin password
-echo ""
-echo -e "${GREEN}Step 7: Retrieving Grafana credentials...${NC}"
+echo -e "${GREEN}Step 4: Retrieving Grafana credentials...${NC}"
 sleep 10  # Wait for secret to be created
 GRAFANA_PASSWORD=$(kubectl get secret --namespace monitoring kube-prometheus-stack-grafana -o jsonpath="{.data.admin-password}" | base64 --decode)
 echo "Grafana admin password: ${GRAFANA_PASSWORD}"
 
-# Step 8: Print access instructions
+# Step 5: Print access instructions
 echo ""
 echo -e "${GREEN}========================================${NC}"
 echo -e "${GREEN}Monitoring Installation Complete!${NC}"
@@ -170,7 +115,6 @@ echo -e "${GREEN}========================================${NC}"
 echo ""
 echo -e "${YELLOW}Verify installation:${NC}"
 echo "  kubectl get pods -n monitoring"
-echo "  kubectl get podmonitors --all-namespaces"
 echo ""
 echo -e "${YELLOW}Access Grafana:${NC}"
 echo "  1. Port-forward Grafana service:"
@@ -182,23 +126,17 @@ echo -e "${YELLOW}Grafana Credentials:${NC}"
 echo "  Username: admin"
 echo "  Password: ${GRAFANA_PASSWORD}"
 echo ""
-echo -e "${YELLOW}Import CloudNativePG Dashboard:${NC}"
-echo "  1. In Grafana, go to Dashboards > Import"
-echo "  2. Enter dashboard ID: 20417"
-echo "  3. Select Prometheus datasource"
-echo "  4. Click Import"
-echo ""
-echo -e "${YELLOW}MongoDB Dashboards (choose one):${NC}"
-echo "  - Dashboard ID: 2583 (MongoDB Overview)"
-echo "  - Dashboard ID: 7353 (MongoDB Exporter)"
-echo "  - Dashboard ID: 12079 (MongoDB)"
-echo ""
 echo -e "${YELLOW}Access Prometheus:${NC}"
 echo "  kubectl port-forward svc/kube-prometheus-stack-prometheus -n monitoring 9090:9090"
 echo "  Open http://localhost:9090"
 echo ""
-echo -e "${YELLOW}Check metrics are being scraped:${NC}"
-echo "  In Prometheus UI, go to Status > Targets"
-echo "  You should see postgres and mongodb targets"
+echo -e "${YELLOW}Next Steps:${NC}"
+echo "  Deploy databases with monitoring enabled:"
+echo "    ./create_pg.sh      # PostgreSQL with CloudNativePG"
+echo "    ./create_mongodb.sh # MongoDB"
+echo "    ./create_oracle.sh  # Oracle 23c"
+echo "    ./create_os.sh      # OpenSearch"
+echo ""
+echo "  Each script will automatically configure monitoring for its product."
 echo ""
 exit 0
