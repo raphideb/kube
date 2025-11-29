@@ -55,25 +55,27 @@ if [[ ! $CONFIRM =~ ^[Yy]$ ]]; then
 fi
 
 echo ""
-echo -e "${GREEN}Step 1: Creating namespace ${PG_NAMESPACE}...${NC}"
+echo -e "${GREEN}Step 1: Creating namespaces...${NC}"
+kubectl create namespace postgres --dry-run=client -o yaml | kubectl apply -f -
+echo "Namespace 'postgres' created (for operator)."
 kubectl create namespace ${PG_NAMESPACE} --dry-run=client -o yaml | kubectl apply -f -
-echo "Namespace created."
+echo "Namespace '${PG_NAMESPACE}' created (for database cluster)."
 
 echo ""
 echo -e "${GREEN}Step 2: Installing CloudNativePG operator...${NC}"
-if ! helm list -n ${PG_NAMESPACE} | grep -q cnpg-operator; then
+if ! helm list -n postgres | grep -q cnpg-operator; then
     helm repo add cnpg https://cloudnative-pg.github.io/charts
     helm repo update
-    helm install cnpg-operator cnpg/cloudnative-pg --namespace ${PG_NAMESPACE}
+    helm install cnpg-operator cnpg/cloudnative-pg --namespace postgres
 
     echo "Waiting for CloudNativePG operator to be ready..."
     sleep 15
-    kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=cloudnative-pg -n ${PG_NAMESPACE} --timeout=180s
-    echo "CloudNativePG operator installed."
+    kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=cloudnative-pg -n postgres --timeout=180s
+    echo "CloudNativePG operator installed in 'postgres' namespace."
     echo "Installing cnpg plugin"
     curl -sSfL https://github.com/cloudnative-pg/cloudnative-pg/raw/main/hack/install-cnpg-plugin.sh | sudo sh -s -- -b /usr/local/bin
 else
-    echo "CloudNativePG operator already installed."
+    echo "CloudNativePG operator already installed in 'postgres' namespace."
 fi
 
 echo ""
@@ -126,11 +128,14 @@ EOF
 apiVersion: monitoring.coreos.com/v1
 kind: PodMonitor
 metadata:
-  name: cnpg-operator-${PG_NAMESPACE}
-  namespace: ${PG_NAMESPACE}
+  name: cnpg-operator
+  namespace: postgres
   labels:
     app.kubernetes.io/name: cloudnative-pg
 spec:
+  namespaceSelector:
+    matchNames:
+    - postgres
   selector:
     matchLabels:
       app.kubernetes.io/name: cloudnative-pg
