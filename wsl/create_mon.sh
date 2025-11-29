@@ -46,6 +46,9 @@ prometheus:
           resources:
             requests:
               storage: 10Gi
+  service:
+    type: NodePort
+    nodePort: 30090
 grafana:
   adminPassword: admin
   persistence:
@@ -53,7 +56,8 @@ grafana:
     storageClassName: local-path
     size: 5Gi
   service:
-    type: ClusterIP
+    type: NodePort
+    nodePort: 30000
 EOF
 
     helm install kube-prometheus-stack prometheus-community/kube-prometheus-stack \
@@ -107,7 +111,10 @@ sleep 10  # Wait for secret to be created
 GRAFANA_PASSWORD=$(kubectl get secret --namespace monitoring kube-prometheus-stack-grafana -o jsonpath="{.data.admin-password}" | base64 --decode)
 echo "Grafana admin password: ${GRAFANA_PASSWORD}"
 
-# Step 5: Print access instructions
+# Step 5: Get host IP address
+HOST_IP=$(kubectl get nodes -o jsonpath='{.items[0].status.addresses[?(@.type=="InternalIP")].address}' 2>/dev/null || hostname -I | awk '{print $1}')
+
+# Step 6: Print access instructions
 echo ""
 echo -e "${GREEN}========================================${NC}"
 echo -e "${GREEN}Monitoring Installation Complete!${NC}"
@@ -117,18 +124,25 @@ echo -e "${YELLOW}Verify installation:${NC}"
 echo "  kubectl get pods -n monitoring"
 echo ""
 echo -e "${YELLOW}Access Grafana:${NC}"
-echo "  1. Port-forward Grafana service:"
-echo "     kubectl port-forward svc/kube-prometheus-stack-grafana -n monitoring 3000:80"
-echo ""
-echo "  2. Open http://localhost:3000 in your browser"
+echo "  Open http://${HOST_IP}:30000 in your browser"
 echo ""
 echo -e "${YELLOW}Grafana Credentials:${NC}"
 echo "  Username: admin"
 echo "  Password: ${GRAFANA_PASSWORD}"
 echo ""
 echo -e "${YELLOW}Access Prometheus:${NC}"
-echo "  kubectl port-forward svc/kube-prometheus-stack-prometheus -n monitoring 9090:9090"
-echo "  Open http://localhost:9090"
+echo "  Open http://${HOST_IP}:30090 in your browser"
+echo ""
+echo -e "${YELLOW}Note:${NC}"
+echo "  Services are exposed as NodePort and permanently accessible"
+echo "  No port-forwarding required!"
+echo ""
+echo -e "${YELLOW}HTTPS Configuration:${NC}"
+echo "  Grafana is currently running on HTTP."
+echo "  To enable HTTPS, you can:"
+echo "  1. Use an Ingress controller with TLS (recommended for production)"
+echo "  2. Configure Grafana's built-in HTTPS support"
+echo "  See: https://grafana.com/docs/grafana/latest/setup-grafana/set-up-https/"
 echo ""
 echo -e "${YELLOW}Next Steps:${NC}"
 echo "  Deploy databases with monitoring enabled:"

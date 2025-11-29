@@ -28,15 +28,24 @@ if ! kubectl cluster-info &> /dev/null; then
 fi
 
 # Prompt for user inputs
+read -p "Enter PostgreSQL cluster name (default: postgres-cluster): " PG_CLUSTER_NAME
+PG_CLUSTER_NAME=${PG_CLUSTER_NAME:-postgres-cluster}
+
+read -p "Enter namespace (default: postgres): " PG_NAMESPACE
+PG_NAMESPACE=${PG_NAMESPACE:-postgres}
+
 read -p "Enter PostgreSQL storage size (default: 20Gi): " PG_STORAGE
 PG_STORAGE=${PG_STORAGE:-20Gi}
 
-read -p "Enter PostgreSQL replica count (default: 3): " PG_REPLICAS
-PG_REPLICAS=${PG_REPLICAS:-3}
+read -p "Enter PostgreSQL replica count (default: 1): " PG_REPLICAS
+PG_REPLICAS=${PG_REPLICAS:-1}
 
 echo ""
 echo -e "${YELLOW}Configuration Summary:${NC}"
-echo "PostgreSQL Storage: $PG_STORAGE (replicas: $PG_REPLICAS)"
+echo "Cluster Name: $PG_CLUSTER_NAME"
+echo "Namespace: $PG_NAMESPACE"
+echo "Storage: $PG_STORAGE"
+echo "Replicas: $PG_REPLICAS"
 echo ""
 
 read -p "Continue with PostgreSQL installation? (y/n): " CONFIRM
@@ -46,20 +55,20 @@ if [[ ! $CONFIRM =~ ^[Yy]$ ]]; then
 fi
 
 echo ""
-echo -e "${GREEN}Step 1: Creating postgres namespace...${NC}"
-kubectl create namespace postgres --dry-run=client -o yaml | kubectl apply -f -
+echo -e "${GREEN}Step 1: Creating namespace ${PG_NAMESPACE}...${NC}"
+kubectl create namespace ${PG_NAMESPACE} --dry-run=client -o yaml | kubectl apply -f -
 echo "Namespace created."
 
 echo ""
 echo -e "${GREEN}Step 2: Installing CloudNativePG operator...${NC}"
-if ! helm list -n postgres | grep -q cnpg-operator; then
+if ! helm list -n ${PG_NAMESPACE} | grep -q cnpg-operator; then
     helm repo add cnpg https://cloudnative-pg.github.io/charts
     helm repo update
-    helm install cnpg-operator cnpg/cloudnative-pg --namespace postgres
+    helm install cnpg-operator cnpg/cloudnative-pg --namespace ${PG_NAMESPACE}
 
     echo "Waiting for CloudNativePG operator to be ready..."
     sleep 15
-    kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=cloudnative-pg -n postgres --timeout=180s
+    kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=cloudnative-pg -n ${PG_NAMESPACE} --timeout=180s
     echo "CloudNativePG operator installed."
     echo "Installing cnpg plugin"
     curl -sSfL https://github.com/cloudnative-pg/cloudnative-pg/raw/main/hack/install-cnpg-plugin.sh | sudo sh -s -- -b /usr/local/bin
@@ -68,13 +77,13 @@ else
 fi
 
 echo ""
-echo -e "${GREEN}Step 3: Deploying PostgreSQL cluster...${NC}"
+echo -e "${GREEN}Step 3: Deploying PostgreSQL cluster ${PG_CLUSTER_NAME}...${NC}"
 cat <<EOF | kubectl apply -f -
 apiVersion: postgresql.cnpg.io/v1
 kind: Cluster
 metadata:
-  name: postgres-cluster
-  namespace: postgres
+  name: ${PG_CLUSTER_NAME}
+  namespace: ${PG_NAMESPACE}
 spec:
   instances: ${PG_REPLICAS}
   monitoring:
@@ -95,17 +104,17 @@ if kubectl get crd podmonitors.monitoring.coreos.com &> /dev/null; then
 apiVersion: monitoring.coreos.com/v1
 kind: PodMonitor
 metadata:
-  name: postgres-cluster
-  namespace: postgres
+  name: ${PG_CLUSTER_NAME}
+  namespace: ${PG_NAMESPACE}
   labels:
-    cnpg.io/cluster: postgres-cluster
+    cnpg.io/cluster: ${PG_CLUSTER_NAME}
 spec:
   namespaceSelector:
     matchNames:
-    - postgres
+    - ${PG_NAMESPACE}
   selector:
     matchLabels:
-      cnpg.io/cluster: postgres-cluster
+      cnpg.io/cluster: ${PG_CLUSTER_NAME}
   podMetricsEndpoints:
   - port: metrics
     path: /metrics
@@ -117,8 +126,8 @@ EOF
 apiVersion: monitoring.coreos.com/v1
 kind: PodMonitor
 metadata:
-  name: cnpg-operator
-  namespace: postgres
+  name: cnpg-operator-${PG_NAMESPACE}
+  namespace: ${PG_NAMESPACE}
   labels:
     app.kubernetes.io/name: cloudnative-pg
 spec:
@@ -142,24 +151,27 @@ echo -e "${GREEN}========================================${NC}"
 echo -e "${GREEN}PostgreSQL Deployment Complete!${NC}"
 echo -e "${GREEN}========================================${NC}"
 echo ""
+echo -e "${YELLOW}Cluster: ${PG_CLUSTER_NAME}${NC}"
+echo -e "${YELLOW}Namespace: ${PG_NAMESPACE}${NC}"
+echo ""
 echo -e "${YELLOW}Useful commands:${NC}"
-echo "  kubectl get clusters -n postgres"
-echo "  kubectl get pods -n postgres"
-echo "  kubectl get pvc -n postgres"
+echo "  kubectl get clusters -n ${PG_NAMESPACE}"
+echo "  kubectl get pods -n ${PG_NAMESPACE}"
+echo "  kubectl get pvc -n ${PG_NAMESPACE}"
 echo ""
 echo -e "${YELLOW}Access PostgreSQL:${NC}"
-echo "  kubectl cnpg psql postgres-cluster -n postgres"
-echo "  or: kubectl exec -it postgres-cluster-1 -n postgres -- psql -U postgres"
+echo "  kubectl cnpg psql ${PG_CLUSTER_NAME} -n ${PG_NAMESPACE}"
+echo "  or: kubectl exec -it ${PG_CLUSTER_NAME}-1 -n ${PG_NAMESPACE} -- psql -U postgres"
 echo ""
 echo -e "${YELLOW}Monitor cluster status:${NC}"
-echo "  kubectl get clusters -n postgres -w"
+echo "  kubectl get clusters -n ${PG_NAMESPACE} -w"
 echo ""
 
 # Add Grafana dashboard info if monitoring is installed
 if kubectl get crd podmonitors.monitoring.coreos.com &> /dev/null; then
+    HOST_IP=$(kubectl get nodes -o jsonpath='{.items[0].status.addresses[?(@.type=="InternalIP")].address}' 2>/dev/null || hostname -I | awk '{print $1}')
     echo -e "${YELLOW}Grafana Dashboard:${NC}"
-    echo "  1. Access Grafana (if not already running):"
-    echo "     kubectl port-forward svc/kube-prometheus-stack-grafana -n monitoring 3000:80"
+    echo "  1. Access Grafana at http://${HOST_IP}:30000"
     echo ""
     echo "  2. In Grafana, go to Dashboards > Import"
     echo "  3. Enter dashboard ID: 20417 (CloudNativePG)"

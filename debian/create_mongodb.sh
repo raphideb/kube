@@ -28,11 +28,17 @@ if ! kubectl cluster-info &> /dev/null; then
 fi
 
 # Prompt for user inputs
+read -p "Enter MongoDB cluster name (default: mongodb-cluster): " MONGO_CLUSTER_NAME
+MONGO_CLUSTER_NAME=${MONGO_CLUSTER_NAME:-mongodb-cluster}
+
+read -p "Enter namespace (default: mongodb): " MONGO_NAMESPACE
+MONGO_NAMESPACE=${MONGO_NAMESPACE:-mongodb}
+
 read -p "Enter MongoDB storage size (default: 20Gi): " MONGO_STORAGE
 MONGO_STORAGE=${MONGO_STORAGE:-20Gi}
 
-read -p "Enter MongoDB replica count (default: 3): " MONGO_REPLICAS
-MONGO_REPLICAS=${MONGO_REPLICAS:-3}
+read -p "Enter MongoDB replica count (default: 1): " MONGO_REPLICAS
+MONGO_REPLICAS=${MONGO_REPLICAS:-1}
 
 read -sp "Enter MongoDB admin password: " MONGO_PASSWORD
 echo ""
@@ -44,7 +50,10 @@ fi
 
 echo ""
 echo -e "${YELLOW}Configuration Summary:${NC}"
-echo "MongoDB Storage: $MONGO_STORAGE (replicas: $MONGO_REPLICAS)"
+echo "Cluster Name: $MONGO_CLUSTER_NAME"
+echo "Namespace: $MONGO_NAMESPACE"
+echo "Storage: $MONGO_STORAGE"
+echo "Replicas: $MONGO_REPLICAS"
 echo ""
 
 read -p "Continue with MongoDB installation? (y/n): " CONFIRM
@@ -54,20 +63,20 @@ if [[ ! $CONFIRM =~ ^[Yy]$ ]]; then
 fi
 
 echo ""
-echo -e "${GREEN}Step 1: Creating mongodb namespace...${NC}"
-kubectl create namespace mongodb --dry-run=client -o yaml | kubectl apply -f -
+echo -e "${GREEN}Step 1: Creating namespace ${MONGO_NAMESPACE}...${NC}"
+kubectl create namespace ${MONGO_NAMESPACE} --dry-run=client -o yaml | kubectl apply -f -
 echo "Namespace created."
 
 echo ""
 echo -e "${GREEN}Step 2: Installing MongoDB operator...${NC}"
-if ! helm list -n mongodb | grep -q mongodb-operator; then
+if ! helm list -n ${MONGO_NAMESPACE} | grep -q mongodb-operator; then
     helm repo add mongodb https://mongodb.github.io/helm-charts
     helm repo update
-    helm install mongodb-operator mongodb/community-operator --namespace mongodb
+    helm install mongodb-operator mongodb/community-operator --namespace ${MONGO_NAMESPACE}
 
     echo "Waiting for MongoDB operator to be ready..."
     sleep 15
-    kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=mongodb-kubernetes-operator -n mongodb --timeout=180s || true
+    kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=mongodb-kubernetes-operator -n ${MONGO_NAMESPACE} --timeout=180s || true
     echo "MongoDB operator installed."
 else
     echo "MongoDB operator already installed."
@@ -75,19 +84,19 @@ fi
 
 echo ""
 echo -e "${GREEN}Step 3: Creating MongoDB admin password secret...${NC}"
-kubectl create secret generic mongodb-admin-password \
+kubectl create secret generic ${MONGO_CLUSTER_NAME}-admin-password \
     --from-literal="password=${MONGO_PASSWORD}" \
-    --namespace mongodb \
+    --namespace ${MONGO_NAMESPACE} \
     --dry-run=client -o yaml | kubectl apply -f -
 
 echo ""
-echo -e "${GREEN}Step 4: Deploying MongoDB cluster...${NC}"
+echo -e "${GREEN}Step 4: Deploying MongoDB cluster ${MONGO_CLUSTER_NAME}...${NC}"
 cat <<EOF | kubectl apply -f -
 apiVersion: mongodbcommunity.mongodb.com/v1
 kind: MongoDBCommunity
 metadata:
-  name: mongodb-cluster
-  namespace: mongodb
+  name: ${MONGO_CLUSTER_NAME}
+  namespace: ${MONGO_NAMESPACE}
 spec:
   members: ${MONGO_REPLICAS}
   type: ReplicaSet
@@ -99,13 +108,13 @@ spec:
     - name: admin
       db: admin
       passwordSecretRef:
-        name: mongodb-admin-password
+        name: ${MONGO_CLUSTER_NAME}-admin-password
       roles:
         - name: clusterAdmin
           db: admin
         - name: userAdminAnyDatabase
           db: admin
-      scramCredentialsSecretName: mongodb-admin-scram
+      scramCredentialsSecretName: ${MONGO_CLUSTER_NAME}-admin-scram
   statefulSet:
     spec:
       volumeClaimTemplates:
@@ -129,14 +138,14 @@ if kubectl get crd podmonitors.monitoring.coreos.com &> /dev/null; then
 apiVersion: monitoring.coreos.com/v1
 kind: PodMonitor
 metadata:
-  name: mongodb-cluster-monitor
-  namespace: mongodb
+  name: ${MONGO_CLUSTER_NAME}-monitor
+  namespace: ${MONGO_NAMESPACE}
   labels:
     app: mongodb
 spec:
   selector:
     matchLabels:
-      app: mongodb-cluster-svc
+      app: ${MONGO_CLUSTER_NAME}-svc
   podMetricsEndpoints:
   - port: prometheus
     path: /metrics
@@ -153,23 +162,26 @@ echo -e "${GREEN}========================================${NC}"
 echo -e "${GREEN}MongoDB Deployment Complete!${NC}"
 echo -e "${GREEN}========================================${NC}"
 echo ""
+echo -e "${YELLOW}Cluster: ${MONGO_CLUSTER_NAME}${NC}"
+echo -e "${YELLOW}Namespace: ${MONGO_NAMESPACE}${NC}"
+echo ""
 echo -e "${YELLOW}Useful commands:${NC}"
-echo "  kubectl get mongodb -n mongodb"
-echo "  kubectl get pods -n mongodb"
-echo "  kubectl get pvc -n mongodb"
+echo "  kubectl get mongodb -n ${MONGO_NAMESPACE}"
+echo "  kubectl get pods -n ${MONGO_NAMESPACE}"
+echo "  kubectl get pvc -n ${MONGO_NAMESPACE}"
 echo ""
 echo -e "${YELLOW}Access MongoDB:${NC}"
-echo "  kubectl exec -it mongodb-cluster-0 -n mongodb -- mongosh -u admin -p"
+echo "  kubectl exec -it ${MONGO_CLUSTER_NAME}-0 -n ${MONGO_NAMESPACE} -- mongosh -u admin -p"
 echo ""
 echo -e "${YELLOW}Monitor cluster status:${NC}"
-echo "  kubectl get mongodb -n mongodb -w"
+echo "  kubectl get mongodb -n ${MONGO_NAMESPACE} -w"
 echo ""
 
 # Add Grafana dashboard info if monitoring is installed
 if kubectl get crd podmonitors.monitoring.coreos.com &> /dev/null; then
+    HOST_IP=$(kubectl get nodes -o jsonpath='{.items[0].status.addresses[?(@.type=="InternalIP")].address}' 2>/dev/null || hostname -I | awk '{print $1}')
     echo -e "${YELLOW}Grafana Dashboards:${NC}"
-    echo "  1. Access Grafana (if not already running):"
-    echo "     kubectl port-forward svc/kube-prometheus-stack-grafana -n monitoring 3000:80"
+    echo "  1. Access Grafana at http://${HOST_IP}:30000"
     echo ""
     echo "  2. In Grafana, go to Dashboards > Import"
     echo "  3. Choose one of these MongoDB dashboards:"

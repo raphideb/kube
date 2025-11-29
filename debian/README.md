@@ -102,9 +102,13 @@ If you want to delete everything from Oracle, run:
 ./del_oracle.sh
 ```
 
-**Port Forwarding**
+**Service Access**
 
-In a second window, forward the ports for Grafana, Prometheus and Dashboards. If you did not deploy OpenSearch, you need to edit the file first and then execute:
+Grafana and Prometheus are automatically exposed as NodePort services and permanently accessible at:
+- Grafana: http://<your-host-ip>:30000
+- Prometheus: http://<your-host-ip>:30090
+
+For MongoDB and PostgreSQL, you need to forward the ports in a second window:
 
 ```
 ./portfw.sh
@@ -195,18 +199,20 @@ kubectl exec -it raphiora-z9e4b -n oracle -- sqlplus sys/HomePW_12345@FREE as sy
 ```
 
 ### Grafana
-Open a webbrowser and type in: https://localhost:3000
+Open a webbrowser and navigate to: http://<your-host-ip>:30000
 user and pass is: admin
 
 After login, go to "Dashboards -> New -> Import" and enter this id for a really nice PG Dashboard: 20417
 
 ### OpenSearch
-Open a webbrowser and type in: https://localhost:5601
+After deploying the OpenSearch cluster, access the dashboard at: http://<your-host-ip>:30601
 user and pass is: admin
 
 You are prompted to set a new password then.
 
 Tip: load some sample data after you logged in, for example flight data.
+
+Note: OpenSearch cluster needs to be deployed first with NodePort services (see create_os.sh for configuration).
 
 ## Dashboards
 ### OpenSearch

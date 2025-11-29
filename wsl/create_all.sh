@@ -23,14 +23,14 @@ POD_CIDR=${POD_CIDR:-10.244.0.0/16}
 read -p "Enter PostgreSQL storage size (default: 20Gi): " PG_STORAGE
 PG_STORAGE=${PG_STORAGE:-20Gi}
 
-read -p "Enter PostgreSQL replica count (default: 3): " PG_REPLICAS
-PG_REPLICAS=${PG_REPLICAS:-3}
+read -p "Enter PostgreSQL replica count (default: 1): " PG_REPLICAS
+PG_REPLICAS=${PG_REPLICAS:-1}
 
 read -p "Enter MongoDB storage size (default: 20Gi): " MONGO_STORAGE
 MONGO_STORAGE=${MONGO_STORAGE:-20Gi}
 
-read -p "Enter MongoDB replica count (default: 3): " MONGO_REPLICAS
-MONGO_REPLICAS=${MONGO_REPLICAS:-3}
+read -p "Enter MongoDB replica count (default: 1): " MONGO_REPLICAS
+MONGO_REPLICAS=${MONGO_REPLICAS:-1}
 
 read -sp "Enter MongoDB admin password: " MONGO_PASSWORD
 echo ""
@@ -429,5 +429,9 @@ echo "  kubectl exec -it mongodb-cluster-0 -n mongodb -- mongosh -u admin -p"
 echo ""
 echo -e "${YELLOW}Persistent storage location:${NC}"
 echo "  ${LOCAL_STORAGE_PATH}"
+echo ""
+echo -e "${YELLOW}Next steps:${NC}"
+echo "  Run ./create_os.sh to deploy OpenSearch"
+echo "  Run ./create_oracle.sh to deploy Oracle 23free"
 echo ""
 exit 0
