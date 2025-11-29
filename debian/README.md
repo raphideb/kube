@@ -115,10 +115,30 @@ For MongoDB and PostgreSQL, you need to forward the ports in a second window:
 ```
 
 You *could* also add the ports for the oracle databases but they are randomly assigned during creation. I prefer accessing them through kubectl.
+
 ### Start Kubernetes
-If you reboot your system and need to restart Kubernetes, the following script does that. You can also create a systemctl service to auto-start Kubernetes on boot:
+
+**Automatic Startup:**
+
+After installation, Kubernetes services (docker, cri-docker, kubelet) are enabled to start automatically on system boot. Your cluster will be ready after a reboot without manual intervention.
+
+**Manual Startup:**
+
+If you need to manually start Kubernetes (e.g., after stopping services), you can use:
 ```
 ./start_kube.sh
+```
+
+This script will start all required Kubernetes services.
+
+**Manage Services:**
+
+```bash
+# Start services
+sudo systemctl start docker cri-docker kubelet
+
+# Stop services
+sudo systemctl stop kubelet cri-docker docker
 ```
 
 ## Deploy more clusters

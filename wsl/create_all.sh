@@ -144,7 +144,8 @@ if ! command -v kubeadm &> /dev/null; then
     
     echo "Installed Kubernetes version:"
     kubeadm version
-    echo "Kubernetes components installed."
+    sudo systemctl enable kubelet
+    echo "Kubernetes components installed and enabled for automatic startup."
 else
     echo "Kubernetes components already installed."
     kubeadm version
@@ -429,6 +430,10 @@ echo "  kubectl exec -it mongodb-cluster-0 -n mongodb -- mongosh -u admin -p"
 echo ""
 echo -e "${YELLOW}Persistent storage location:${NC}"
 echo "  ${LOCAL_STORAGE_PATH}"
+echo ""
+echo -e "${YELLOW}Manage services:${NC}"
+echo "  Start: sudo systemctl start docker cri-docker kubelet"
+echo "  Stop:  sudo systemctl stop kubelet cri-docker docker"
 echo ""
 echo -e "${YELLOW}Next steps:${NC}"
 echo "  Run ./create_os.sh to deploy OpenSearch"

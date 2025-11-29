@@ -1,6 +1,4 @@
 #!/bin/bash
-echo "Disable swap"
-sudo swapoff -a
 echo "Starting Kubernetes cluster..."
 sudo systemctl start docker
 sleep 5

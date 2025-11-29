@@ -96,10 +96,30 @@ For MongoDB and PostgreSQL, you need to forward the ports in a second window:
 ```
 
 You *could* also add the ports for the oracle databases but they are randomly assigned during creation. I prefer accessing them through kubectl.
+
 ### Start Kubernetes
-If you shutdown wsl and start it again, you need to also start kubernetes again. The following script does that, you can also create a systemctl service if you like:
+
+**Automatic Startup:**
+
+After installation, Kubernetes services (docker, cri-docker, kubelet) are enabled to start automatically when WSL starts. Swap will be disabled automatically on each boot before Kubernetes starts, ensuring proper cluster operation.
+
+**Manual Startup:**
+
+If you need to manually start Kubernetes (e.g., after stopping services), you can use:
 ```
 ./start_kube.sh
+```
+
+This script will disable swap and start all required Kubernetes services.
+
+**Manage Services:**
+
+```bash
+# Start services
+sudo systemctl start docker cri-docker kubelet
+
+# Stop services
+sudo systemctl stop kubelet cri-docker docker
 ```
 
 ## Deploy more clusters
