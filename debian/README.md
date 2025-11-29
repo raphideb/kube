@@ -61,7 +61,7 @@ If any packages (curl, wget) are missing that are not covered by the install scr
 ./create_os.sh      # 6. Install OpenSearch operator
 ```
 
-**Note:** Scripts work in any order. Each database script auto-configures its own monitoring if the monitoring stack is installed.
+**Note:** Scripts after create_kube.sh work in any order. Each database script auto-configures its own monitoring if the monitoring stack is installed.
 
 ### Option 2: All-in-One Installation
 If you want to install everything at once (Kubernetes + PostgreSQL + MongoDB):
@@ -70,7 +70,7 @@ If you want to install everything at once (Kubernetes + PostgreSQL + MongoDB):
    ```
 
 ### Troubleshooting Installation
-You might (probably will) run into problems that you need to figure out - best way to do that is to copy/paste the error into an AI prompt like perplexity. If for some reason you need to start from scratch, you can uninstall everything with this script:
+You might (probably will) run into problems that you need to figure out - best way to do that is to copy/paste the error into an AI prompt like claude or perplexity. If for some reason you need to start from scratch, you can uninstall everything (except docker and helm) with this script:
    ```
    ./del_kube.sh
    ```
