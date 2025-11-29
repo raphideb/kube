@@ -17,8 +17,8 @@ echo ""
 read -p "Enter Kubernetes version (default: v1.34): " K8S_VERSION
 K8S_VERSION=${K8S_VERSION:-v1.34}
 
-read -p "Enter pod network CIDR (default: 192.168.1.0/24): " POD_CIDR
-POD_CIDR=${POD_CIDR:-192.168.1.0/24}
+read -p "Enter pod network CIDR (default: 10.244.0.0/16): " POD_CIDR
+POD_CIDR=${POD_CIDR:-10.244.0.0/16}
 
 read -p "Enter local path for persistent storage (default: /opt/local-path-provisioner): " LOCAL_STORAGE_PATH
 LOCAL_STORAGE_PATH=${LOCAL_STORAGE_PATH:-/opt/local-path-provisioner}

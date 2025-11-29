@@ -139,7 +139,41 @@ done
 echo "Network interfaces cleaned."
 
 echo ""
-echo -e "${GREEN}Step 9: Re-enabling swap if it was disabled...${NC}"
+echo -e "${GREEN}Step 9: Cleaning up routing table entries...${NC}"
+# Remove blackhole and unreachable routes created by Kubernetes/CNI
+BLACKHOLE_ROUTES=$(ip route show type blackhole 2>/dev/null || true)
+UNREACHABLE_ROUTES=$(ip route show type unreachable 2>/dev/null || true)
+
+if [ -n "$BLACKHOLE_ROUTES" ] || [ -n "$UNREACHABLE_ROUTES" ]; then
+    echo "Found problematic routes, removing..."
+
+    if [ -n "$BLACKHOLE_ROUTES" ]; then
+        echo "  Removing blackhole routes:"
+        while IFS= read -r route; do
+            if [ -n "$route" ]; then
+                echo "    - $route"
+                sudo ip route del $route 2>/dev/null || true
+            fi
+        done <<< "$BLACKHOLE_ROUTES"
+    fi
+
+    if [ -n "$UNREACHABLE_ROUTES" ]; then
+        echo "  Removing unreachable routes:"
+        while IFS= read -r route; do
+            if [ -n "$route" ]; then
+                echo "    - $route"
+                sudo ip route del $route 2>/dev/null || true
+            fi
+        done <<< "$UNREACHABLE_ROUTES"
+    fi
+
+    echo "Routing table cleaned."
+else
+    echo "No problematic routes found."
+fi
+
+echo ""
+echo -e "${GREEN}Step 10: Re-enabling swap if it was disabled...${NC}"
 # Check if swap was commented out in fstab
 if grep -q '^#.*swap' /etc/fstab 2>/dev/null; then
     echo "Swap entries found commented out in /etc/fstab."
@@ -157,12 +191,12 @@ else
 fi
 
 echo ""
-echo -e "${GREEN}Step 10: Restarting Docker...${NC}"
+echo -e "${GREEN}Step 11: Restarting Docker...${NC}"
 sudo systemctl restart docker
 echo "Docker restarted."
 
 echo ""
-echo -e "${GREEN}Step 11: Verifying cleanup...${NC}"
+echo -e "${GREEN}Step 12: Verifying cleanup...${NC}"
 echo ""
 echo "Remaining Kubernetes processes:"
 ps aux | grep -E 'kube|etcd' | grep -v grep || echo "  None found."

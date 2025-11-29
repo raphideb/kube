@@ -28,8 +28,8 @@ if [ "$K8S_MAJOR" -lt 1 ] || ([ "$K8S_MAJOR" -eq 1 ] && [ "$K8S_MINOR" -lt 29 ])
     exit 1
 fi
 
-read -p "Enter pod network CIDR (default: 192.168.1.0/24): " POD_CIDR
-POD_CIDR=${POD_CIDR:-192.168.1.0/24}
+read -p "Enter pod network CIDR (default: 10.244.0.0/16): " POD_CIDR
+POD_CIDR=${POD_CIDR:-10.244.0.0/16}
 
 read -p "Enter local path for persistent storage (default: /opt/local-path-provisioner): " LOCAL_STORAGE_PATH
 LOCAL_STORAGE_PATH=${LOCAL_STORAGE_PATH:-/opt/local-path-provisioner}
