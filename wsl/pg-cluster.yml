@@ -1,0 +1,37 @@
+---
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: pg-raphi
+  namespace: postgres
+spec:
+  instances: 3
+  
+  storage:
+    storageClass: local-path
+    size: 10Gi
+  
+  walStorage:
+    storageClass: local-path
+    size: 5Gi
+
+---
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: pg-raphi
+  namespace: postgres
+  labels:
+    cnpg.io/cluster: pg-raphi
+spec:
+  namespaceSelector:
+    matchNames:
+    - postgres
+  selector:
+    matchLabels:
+      cnpg.io/cluster: pg-raphi
+  podMetricsEndpoints:
+  - port: metrics
+    path: /metrics
+    interval: 30s
+

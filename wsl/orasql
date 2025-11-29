@@ -1,0 +1,62 @@
+#!/bin/bash
+#!/bin/bash
+
+# Usage: orasql <database-name> [namespace]
+# Example: orasql raphiora
+# Example: orasql oracle23 oracle
+
+DB_NAME=${1}
+NAMESPACE=${2:-oracle}
+
+if [ -z "$DB_NAME" ]; then
+    echo "Usage: orasql <database-name> [namespace]"
+    echo ""
+    echo "Available databases:"
+    kubectl get singleinstancedatabase -n ${NAMESPACE} -o custom-columns=NAME:.metadata.name,STATUS:.status.status,SID:.spec.sid --no-headers
+    exit 1
+fi
+
+# Get the pod name
+POD_NAME=$(kubectl get pods -n ${NAMESPACE} -l app=${DB_NAME} -o jsonpath='{.items[0].metadata.name}' 2>/dev/null)
+
+if [ -z "$POD_NAME" ]; then
+    echo "Error: No pod found for database '${DB_NAME}' in namespace '${NAMESPACE}'"
+    echo ""
+    echo "Available databases:"
+    kubectl get singleinstancedatabase -n ${NAMESPACE} -o custom-columns=NAME:.metadata.name,STATUS:.status.status --no-headers
+    exit 1
+fi
+
+# Get the SID from the SingleInstanceDatabase resource
+SID=$(kubectl get singleinstancedatabase ${DB_NAME} -n ${NAMESPACE} -o jsonpath='{.spec.sid}' 2>/dev/null)
+
+if [ -z "$SID" ]; then
+    SID="FREE"
+fi
+
+# Try to get password from the secret specified in the database spec
+SECRET_NAME=$(kubectl get singleinstancedatabase ${DB_NAME} -n ${NAMESPACE} -o jsonpath='{.spec.adminPassword.secretName}' 2>/dev/null)
+SECRET_KEY=$(kubectl get singleinstancedatabase ${DB_NAME} -n ${NAMESPACE} -o jsonpath='{.spec.adminPassword.secretKey}' 2>/dev/null)
+
+# Fallback to default secret name if not found
+if [ -z "$SECRET_NAME" ]; then
+    SECRET_NAME="${DB_NAME}-secret"
+fi
+
+if [ -z "$SECRET_KEY" ]; then
+    SECRET_KEY="oracle_pwd"
+fi
+
+# Get password from secret
+PASSWORD=$(kubectl get secret ${SECRET_NAME} -n ${NAMESPACE} -o jsonpath="{.data.${SECRET_KEY}}" 2>/dev/null | base64 -d)
+
+if [ -z "$PASSWORD" ]; then
+    echo "Error: Could not retrieve password from secret '${SECRET_NAME}' key '${SECRET_KEY}'"
+    echo "Connecting without password (you'll be prompted)..."
+    kubectl exec -it ${POD_NAME} -n ${NAMESPACE} -- sqlplus / as sysdba
+else
+    echo "Connecting to ${DB_NAME} (SID: ${SID})..."
+    # Use SYS user (not SYSTEM) with the password from the secret
+    kubectl exec -it ${POD_NAME} -n ${NAMESPACE} -- sqlplus sys/${PASSWORD}@${SID} as sysdba
+fi
+exit 0

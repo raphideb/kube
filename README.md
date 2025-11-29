@@ -1,212 +1,81 @@
-# Scripts to setup a vanilla Kubernetes cluster in WSL
-## Description
-These scripts are used to setup the following:
-1. Helm and Docker with cri-docker
-2. Kubernetes cluster with persistent storage and Calico networking
-3. CloudNative-PG operator with cnpg plugin and deployment of a sample DB
-4. MongoDB operator and deployment of a sample DB
-5. Oracle operator and deployment of a sample DB
-6. OpenSearch operator
-7. Prometheus
-8. Grafana
+# Kubernetes Setup Scripts
 
-Plus yaml files for deploying:
-- postgres cluster with grafana support 
-- mongodb cluster (will add grafana later)
-- opensearch cluster with dashboard
+This repository contains scripts to set up a vanilla Kubernetes cluster with various database operators and monitoring tools. 
 
-And deploy scripts for:
-- oracle23 free edition with grafana support
+## Directory Structure
 
-**Important**
-When everything is running, on my machine WSL uses over 16GB of memory and swap needs to be disabled. If this is too much for your machine, consider using k3d or kind. 
+This repository is organized into two directories based on your target platform:
 
-## Installation
-This assumes that you have a working WSL/Debian installation (I used Debian 12.11) and that you have downloaded all files into a directory in WSL. Everything can be executed as a normal user, sudo will be used where needed. 
+### 📁 `wsl/` - For WSL (Windows Subsystem for Linux) with Debian
 
-If any packages (curl, wget) are missing that are not covered by the install script, install them manually.
+Use the scripts in the **wsl** directory if you are running **WSL with Debian** on Windows.
 
-1. Setup kubernetes
+These scripts include WSL-specific configurations such as:
+- Systemd configuration for WSL
+- WSL-specific startup procedures
+- Path adjustments for WSL environment
+
+**[📖 Go to WSL documentation →](wsl/README.md)**
+
+### 📁 `debian/` - For Native Debian Installation
+
+Use the scripts in the **debian** directory if you are running **native Debian** directly on Linux (not WSL).
+
+These scripts are optimized for standard Debian installations without WSL-specific code.
+
+**[📖 Go to Debian documentation →](debian/README.md)**
+
+Both variants were tested with Debian 13.
+
+## What Gets Installed
+
+Both directories contain scripts to install:
+
+**Core Infrastructure:**
+- Docker with cri-dockerd
+- Kubernetes cluster with Calico networking
+- Local-path-provisioner for persistent storage
+- Helm package manager
+
+**Database Operators:**
+- CloudNativePG (PostgreSQL) operator
+- MongoDB Community operator
+- Oracle Database operator
+
+**Monitoring & Search:**
+- Prometheus
+- Grafana
+- OpenSearch
+
+## Quick Start
+
+1. **Choose your directory** based on your platform (wsl or debian)
+2. **Navigate to that directory:**
+   ```bash
+   cd wsl/    # For WSL users
+   # OR
+   cd debian/ # For native Debian users
    ```
-   ./create_kube.sh
-   ```
-   You might (probably will) run into problems that you need to figure out - best way to do that is to copy/paste the error into an AI prompt like perplexity. If for some reason you need to start from scratch, you can uninstall everything with this script:
-   ```
-   ./del_kube.sh
-   ```
-   And then run the installation again.
-  
-3. Install Prometheus & Grafana
-   ```
-   ./create_mon.sh
-   ```
-4. Install OpenSearch operator (optional)
-   ```
-   ./create_os.sh
-   ```
-5. Deploy OpenSearch cluster (optional)
-   ```
-   kubectl apply -f opensearch.yml
-   ```
-6. Deploy Oracle (optional)
-   ```
-   ./create_oracle.sh
-   ```
-   If you want to delete everything from Oracle, run:
-   ```
-   ./del_oracle.sh
-   ```
-7. In a second window, forward the ports for Grafana, Prometheus and Dashboards. If you did not deploy OpenSearch, you need to edit the file first and then execute:
-   ```
-   ./portfw.sh
-   ```
-   You *could* also add the ports for the oracle databases but they are randomly assigned during creation. I prefer accessing them through kubectl.
-### Start Kubernetes
-If you shutdown wsl and start it again, you need to also start kubernetes again. The following script does that, you can also create a systemctl service if you like:
-```
-./start_kube.sh
-```
+3. **Follow the README.md** in that directory for installation instructions
 
-## Deploy more clusters
-By this point you already have a sample postgres and mongodb deployed, including grafana for PG. To deploy another mongodb or postgres DB, simply run:
-```
-kubectl apply -f mongodb.yml
-kubectl apply -f pg-cluster.yml
-```
-You can use these yml files as a template to play around. If you want to access the databases with mongosh or psql, you will need to forward the ports as well. Just add the commands to portfw.sh, adjust the names/ports to your settings:
-```
-kubectl port-forward -n mongodb svc/raphi-mongodb-svc 27017:27017 &
-kubectl port-forward -n postgres svc/pg-raphi-rw 5432:5432 &
-```
-If you already have local WSL installation of mongodb or postgres, change the destination port (the first number), for example:
-```
-kubectl port-forward -n postgres svc/pg-raphi-rw 54320:5432 &
-```
-### Deploy more oracle databases
-For oracle, additional steps are needed to setup the credentials and proper labeling for grafana, which is why a bash script is more suitable. Basic usage is:
-```
-./deploy-oracle.sh <db-name> <sid> <password>
-```
-However the sid has to be FREE for the free edition. Example:
-```
-./deploy-oracle.sh raphiora FREE MySecret_123
-```
+## System Requirements
 
-## Access
-All pods can be directly accessed with kubectl. First get a list of your pods:
-```
-kubectl get pods -n postgres
-kubectl get pods -n mongodb
-kubectl get pods -n opensearch
-kubectl get pods -n oracle
-```
-And then login with:
-```
-kubectl exec -it pg-raphi-1 -n postgres -- bash
-kubectl exec -it raphi-mongodb-0 -n mongodb -- bash
-kubectl exec -it raphiora-z9e4b -n oracle -- sqlplus sys/MySecret_123@FREE as sysdba
-```
-### Postgres
-The easiest way to connect to postgres is through cnpg plugin:
-```
-kubectl cnpg psql pg-raphi -n postgres
-```
-Or use psql with the port you are forwarding to:
-```
-psql -h localhost -p 54320 -U postgres postgres
-```
+- Debian
+- At least 16GB RAM (recommended when running all components)
+- Swap will be disabled on WSL; swap can remain enabled on native Debian
+- Sudo privileges
 
-### Mongodb
-With mongosh, password is in mongodb.yml if you haven't changed it yet:
-```
-mongosh -u raphi mongodb://localhost:27017/raphi-db
-```
+## Support
 
-### Oracle
-The easiest way to connect to oracle is to use the script "orasql" in this repo, if the database was deployed with "deploy-oracle.sh":
-```
-./orasql
-Usage: orasql <database-name> [namespace]
+For platform-specific instructions and troubleshooting, refer to the README.md file in the appropriate directory:
+- [WSL Installation Guide](wsl/README.md)
+- [Debian Installation Guide](debian/README.md)
 
-Available databases:
-oracle23    Healthy   FREE
-raphiora    Healthy   FREE
-```
-Example:
-```
-./orasql raphiora
-```
+## Repository Contents
 
-Alternatively, you can list the available databases, get the corresponding pod and login with password on the commandline:
-```
-kubectl get singleinstancedatabase -n oracle
-kubectl get pods -n oracle -l app=raphiora -o jsonpath='{.items[0].metadata.name}'
-kubectl exec -it raphiora-z9e4b -n oracle -- sqlplus sys/HomePW_12345@FREE as sysdba
-```
-
-### Grafana
-Open a webbrowser and type in: https://localhost:3000
-user and pass is: admin
-
-After login, go to "Dashboards -> New -> Import" and enter this id for a really nice PG Dashboard: 20417
-
-### OpenSearch
-Open a webbrowser and type in: https://localhost:5601
-user and pass is: admin
-
-You are prompted to set a new password then.
-
-Tip: load some sample data after you logged in, for example flight data.
-
-## Dashboards
-### OpenSearch
-<img width="3839" height="2159" alt="opensearch" src="https://github.com/user-attachments/assets/a4a3b640-1a94-4f0b-b65b-656ad584448e" />
-
-### Grafana
-#### PostgresSQL
-Name: CloudNativePG  
-Dashboard ID: 20417
-
-<img width="3839" height="2159" alt="grafana" src="https://github.com/user-attachments/assets/8492632b-240e-47bb-afee-df10d5bce5e8" />
-
-### Oracle
-Name: OracleDB Monitoring - performance and table space stats  
-Original dashboard ID: 13555
-
-The original Oracle dashboard lets you select databases only by host ip. I modified it to be able to select by database name. Import this file into grafana from the repo:
-```
-OracleDB_Grafana.json
-```
-![oracle_grafana](https://github.com/user-attachments/assets/6e2a3b2d-1267-4a55-bb8a-8bd96483b1e6)
-
-## Troubleshooting
-### prometheus node exporter
-If the node export pod keeps crashing, check the log files:
-```
-raphi@plexus:~$ kubectl get pods -n monitoring |grep node-exporter
-kube-prometheus-stack-prometheus-node-exporter-xbzrm        0/1     CrashLoopBackOff   24 (51s ago)   29h
-raphi@plexus:~$ kubectl describe pods -n monitoring kube-prometheus-stack-prometheus-node-exporter-xbzrm
-```
-If you see lines like this one:
-```
-Warning  Failed          39s (x2 over 80s)    kubelet  Error: failed to start container "node-exporter": Error response from daemon: path / is mounted on / but it is not a shared or slave mount
-```
-Apply the following patch:
-```
-kubectl patch daemonset kube-prometheus-stack-prometheus-node-exporter -n monitoring --type=json -p='[{"op": "remove", "path": "/spec/template/spec/containers/0/volumeMounts/2/mountPropagation"}]'
-```
-This should fix the issue and the pod should be running.
-
-### grafana
-My grafana pod crashed after a while and kubectl describe show this message: 
-```
-Warning  BackOff  2m36s (x532 over 117m)  kubelet  Back-off restarting failed container init-chown-data in pod kube-prometheus-stack-grafana
-```
-If this happens, chmod the PV directories (they are always 777):
-```
-sudo chmod -R 777 /opt/local-path-provisioner/pvc-*
-```
-You might need to delete the pod afterwards, a new one will automatically be created:
-```
-kubectl delete pod -n monitoring kube-prometheus-stack-grafana-845f8c6c46-jqn6k
-```
+Each directory contains:
+- **Installation scripts** (`create_*.sh`) for modular or all-in-one setup
+- **Deployment scripts** for additional database instances
+- **YAML templates** for cluster configurations
+- **Helper scripts** for port forwarding and management
+- **Complete documentation** specific to the platform

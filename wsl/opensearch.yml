@@ -1,0 +1,77 @@
+---
+# Admin credentials secret
+apiVersion: v1
+kind: Secret
+metadata:
+  name: opensearch-admin-credentials
+  namespace: opensearch
+type: Opaque
+stringData:
+  username: admin
+  password: "OpenSearch123!"
+
+---
+# OpenSearch Cluster with 3 nodes and Dashboards
+apiVersion: opensearch.opster.io/v1
+kind: OpenSearchCluster
+metadata:
+  name: opensearch-cluster
+  namespace: opensearch
+spec:
+  general:
+    serviceName: opensearch-cluster
+    version: 2.11.1
+    httpPort: 9200
+    vendor: opensearch
+    pluginsList:
+      - repository-s3
+  
+  # Enable OpenSearch Dashboards
+  dashboards:
+    enable: true
+    version: 2.11.1
+    replicas: 1
+    resources:
+      requests:
+        memory: "1Gi"
+        cpu: "500m"
+      limits:
+        memory: "2Gi"
+        cpu: "1000m"
+  
+  # Cluster configuration
+  confMgmt:
+    smartScaler: true
+  
+  # Node pools - 3 data nodes
+  nodePools:
+    - component: nodes
+      replicas: 3
+      diskSize: "15Gi"
+      resources:
+        requests:
+          memory: "2Gi"
+          cpu: "1000m"
+        limits:
+          memory: "4Gi"
+          cpu: "2000m"
+      jvm: -Xmx2g -Xms2g
+      roles:
+        - "cluster_manager"
+        - "data"
+        - "ingest"
+      persistence:
+        pvc:
+          storageClass: local-path
+          accessModes:
+            - ReadWriteOnce
+      additionalConfig:
+        node.max_local_storage_nodes: "3"
+        indices.query.bool.max_clause_count: "2048"
+  
+  # Security configuration
+  security:
+    config:
+      adminCredentialsSecret:
+        name: opensearch-admin-credentials
+
