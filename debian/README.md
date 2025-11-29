@@ -37,7 +37,11 @@ These scripts are designed for **native Debian installation** and are used to se
 
 When everything is running, this setup uses over 16GB of memory.
 
-**Note on Swap:** Unlike the WSL version, these scripts are configured to allow swap to remain enabled on your system. Kubernetes will be configured with `--fail-swap-on=false` to permit running with swap active, which is useful for native Debian installations where you may want to preserve swap for other system processes.
+## Swap Handling
+
+**Note on Swap:**
+
+If swap is configured on the host, it will remain enabled for the host but disabled for Kubernetes pods when cgroup v2 is available. Otherwise, swap will be disabled on the host entirely. Requires Kubernetes v1.29 or higher.
 
 ## Installation
 This assumes that you have a working Debian installation and that you have downloaded all files into a directory. Everything can be executed as a normal user, sudo will be used where needed.

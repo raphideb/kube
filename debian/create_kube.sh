@@ -17,6 +17,17 @@ echo ""
 read -p "Enter Kubernetes version (default: v1.34): " K8S_VERSION
 K8S_VERSION=${K8S_VERSION:-v1.34}
 
+# Validate Kubernetes version (must be >= 1.29 for swap support)
+K8S_VERSION_NUM=$(echo $K8S_VERSION | sed 's/^v//' | cut -d'.' -f1-2)
+K8S_MAJOR=$(echo $K8S_VERSION_NUM | cut -d'.' -f1)
+K8S_MINOR=$(echo $K8S_VERSION_NUM | cut -d'.' -f2)
+
+if [ "$K8S_MAJOR" -lt 1 ] || ([ "$K8S_MAJOR" -eq 1 ] && [ "$K8S_MINOR" -lt 29 ]); then
+    echo -e "${RED}Error: Kubernetes version must be at least v1.29 for proper swap handling.${NC}"
+    echo "You specified: $K8S_VERSION"
+    exit 1
+fi
+
 read -p "Enter pod network CIDR (default: 192.168.1.0/24): " POD_CIDR
 POD_CIDR=${POD_CIDR:-192.168.1.0/24}
 
@@ -34,6 +45,38 @@ read -p "Continue with installation? (y/n): " CONFIRM
 if [[ ! $CONFIRM =~ ^[Yy]$ ]]; then
     echo "Installation cancelled."
     exit 0
+fi
+
+# Check for cgroup v2 and handle swap configuration
+echo ""
+echo -e "${GREEN}Checking system configuration...${NC}"
+SWAP_DISABLED=false
+
+if mount | grep -q "cgroup2 on /sys/fs/cgroup type cgroup2"; then
+    echo -e "${GREEN}cgroup v2 detected - Kubernetes will be configured to prevent pods from using swap.${NC}"
+    echo "Host applications can still use swap normally."
+    USE_CGROUP2_SWAP=true
+else
+    echo -e "${YELLOW}cgroup v2 is not enabled on this system.${NC}"
+    echo "To prevent Kubernetes pods from using swap, swap must be disabled entirely on the host."
+    echo ""
+    echo -e "${YELLOW}Note: Disabling swap is usually safe and is the standard Kubernetes configuration.${NC}"
+    echo "System will use only RAM for all processes."
+    echo ""
+    read -p "Disable swap on the host? (y/n): " DISABLE_SWAP
+
+    if [[ ! $DISABLE_SWAP =~ ^[Yy]$ ]]; then
+        echo -e "${RED}Cannot proceed without either cgroup v2 or disabled swap.${NC}"
+        echo "To enable cgroup v2, add 'systemd.unified_cgroup_hierarchy=1' to kernel parameters and reboot."
+        exit 1
+    fi
+
+    echo "Disabling swap..."
+    sudo swapoff -a
+    sudo sed -i '/ swap / s/^/#/' /etc/fstab
+    SWAP_DISABLED=true
+    USE_CGROUP2_SWAP=false
+    echo -e "${GREEN}Swap disabled on host.${NC}"
 fi
 
 echo ""
@@ -117,10 +160,11 @@ else
 fi
 
 echo ""
-echo -e "${GREEN}Step 5: Preparing kubeadm configuration for swap...${NC}"
-# Note: Swap is NOT disabled on this system to preserve system functionality
-# Instead, we configure kubelet to allow swap via kubeadm config
-cat > /tmp/kubeadm-config.yaml <<EOF
+echo -e "${GREEN}Step 5: Preparing kubeadm configuration...${NC}"
+if [ "$USE_CGROUP2_SWAP" = true ]; then
+    # cgroup v2 available: configure Kubernetes to prevent pods from using swap
+    # while allowing host applications to use swap
+    cat > /tmp/kubeadm-config.yaml <<EOF
 apiVersion: kubeadm.k8s.io/v1beta4
 kind: InitConfiguration
 nodeRegistration:
@@ -138,8 +182,28 @@ networking:
 apiVersion: kubelet.config.k8s.io/v1beta1
 kind: KubeletConfiguration
 failSwapOn: false
+memorySwap:
+  swapBehavior: NoSwap
 EOF
-echo "Kubeadm configuration created with swap support."
+    echo "Kubeadm configuration created with NoSwap behavior (pods cannot use swap)."
+else
+    # Swap is disabled on host: standard configuration
+    cat > /tmp/kubeadm-config.yaml <<EOF
+apiVersion: kubeadm.k8s.io/v1beta4
+kind: InitConfiguration
+nodeRegistration:
+  criSocket: unix:///var/run/cri-dockerd.sock
+  ignorePreflightErrors:
+    - NumCPU
+    - Mem
+---
+apiVersion: kubeadm.k8s.io/v1beta4
+kind: ClusterConfiguration
+networking:
+  podSubnet: ${POD_CIDR}
+EOF
+    echo "Kubeadm configuration created (swap disabled on host)."
+fi
 
 echo ""
 echo -e "${GREEN}Step 6: Initializing Kubernetes cluster...${NC}"
