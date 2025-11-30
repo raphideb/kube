@@ -1,0 +1,48 @@
+# NOTE: To use a different namespace, you must change "postgres" in THREE places:
+# 1. Cluster metadata.namespace (below)
+# 2. PodMonitor metadata.namespace (in the second resource)
+# 3. PodMonitor spec.namespaceSelector.matchNames (in the second resource)
+#
+# The cluster name (pg-raphi) can stay the same or be changed as needed.
+#
+# IMPORTANT: The kube-prometheus-stack admission webhook will silently reject
+# PodMonitor creation if the target pods don't exist yet. If the PodMonitor
+# doesn't get created on first apply, wait for the pods to be running and
+# then run 'kubectl apply -f' again.
+---
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: pg-raphi
+  namespace: postgres  # CHANGE HERE for different namespace
+spec:
+  instances: 3
+
+  storage:
+    storageClass: local-path
+    size: 10Gi
+
+  walStorage:
+    storageClass: local-path
+    size: 5Gi
+
+---
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: pg-raphi
+  namespace: postgres  # CHANGE HERE to match Cluster namespace
+  labels:
+    cnpg.io/cluster: pg-raphi
+spec:
+  namespaceSelector:
+    matchNames:
+    - postgres  # CHANGE HERE to match Cluster namespace
+  selector:
+    matchLabels:
+      cnpg.io/cluster: pg-raphi  # This must match the Cluster name above
+  podMetricsEndpoints:
+  - port: metrics
+    path: /metrics
+    interval: 30s
+

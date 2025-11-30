@@ -1,0 +1,68 @@
+---
+# Secret for admin password
+apiVersion: v1
+kind: Secret
+metadata:
+  name: raphi-mongodb-admin-password
+  namespace: mongodb
+type: Opaque
+stringData:
+  password: "ChangeMe123!"  # Change this to a secure password
+
+---
+# MongoDB Community resource
+apiVersion: mongodbcommunity.mongodb.com/v1
+kind: MongoDBCommunity
+metadata:
+  name: raphi-mongodb
+  namespace: mongodb
+spec:
+  members: 3
+  type: ReplicaSet
+  version: "7.0.0"
+  security:
+    authentication:
+      modes: ["SCRAM"]
+  users:
+    - name: admin
+      db: admin
+      passwordSecretRef:
+        name: raphi-mongodb-admin-password
+      roles:
+        - name: clusterAdmin
+          db: admin
+        - name: userAdminAnyDatabase
+          db: admin
+        - name: readWriteAnyDatabase
+          db: admin
+      scramCredentialsSecretName: raphi-mongodb-admin-scram
+    - name: raphi
+      db: raphi-db
+      passwordSecretRef:
+        name: raphi-mongodb-admin-password
+      roles:
+        - name: readWrite
+          db: raphi-db
+      scramCredentialsSecretName: raphi-mongodb-user-scram
+  additionalMongodConfig:
+    storage.wiredTiger.engineConfig.journalCompressor: snappy
+  statefulSet:
+    spec:
+      volumeClaimTemplates:
+        - metadata:
+            name: data-volume
+          spec:
+            accessModes: ["ReadWriteOnce"]
+            storageClassName: local-path
+            resources:
+              requests:
+                storage: 5Gi
+        - metadata:
+            name: logs-volume
+          spec:
+            accessModes: ["ReadWriteOnce"]
+            storageClassName: local-path
+            resources:
+              requests:
+                storage: 1Gi
+
