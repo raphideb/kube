@@ -359,7 +359,9 @@ done
 
 echo "  Waiting for all pods to be ready (Running + Ready condition)..."
 for i in {1..120}; do
-    READY_COUNT=$(kubectl get pods -n postgres -l cnpg.io/cluster=postgres-cluster --no-headers 2>/dev/null | grep -c "Running")
+    # Get count of Running pods (use || echo "0" to prevent set -e from exiting)
+    READY_COUNT=$(kubectl get pods -n postgres -l cnpg.io/cluster=postgres-cluster --no-headers 2>/dev/null | grep -c "Running" || echo "0")
+
     if [ "$READY_COUNT" -ge "${PG_REPLICAS}" ]; then
         if kubectl wait --for=condition=ready pod -l cnpg.io/cluster=postgres-cluster -n postgres --timeout=10s >/dev/null 2>&1; then
             echo "  All ${PG_REPLICAS} PostgreSQL pod(s) are ready!"

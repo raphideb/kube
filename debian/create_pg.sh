@@ -120,15 +120,19 @@ done
 echo "Waiting for all pods to be ready (Running + Ready condition)..."
 WAIT_SUCCESS=false
 for i in {1..120}; do
-    READY_COUNT=$(kubectl get pods -n ${PG_NAMESPACE} -l cnpg.io/cluster=${PG_CLUSTER_NAME} --no-headers 2>/dev/null | grep -c "Running")
+    # Get count of Running pods (use || true to prevent set -e from exiting)
+    READY_COUNT=$(kubectl get pods -n ${PG_NAMESPACE} -l cnpg.io/cluster=${PG_CLUSTER_NAME} --no-headers 2>/dev/null | grep -c "Running" || echo "0")
+
     if [ "$READY_COUNT" -ge "${PG_REPLICAS}" ]; then
-        # Double-check with kubectl wait
+        # Double-check with kubectl wait (protected from set -e)
         if kubectl wait --for=condition=ready pod -l cnpg.io/cluster=${PG_CLUSTER_NAME} -n ${PG_NAMESPACE} --timeout=10s >/dev/null 2>&1; then
             echo "All ${PG_REPLICAS} pod(s) are ready!"
             WAIT_SUCCESS=true
             break
         fi
     fi
+
+    # Show progress every 10 seconds
     if [ $((i % 5)) -eq 0 ]; then
         echo "  $READY_COUNT of ${PG_REPLICAS} pod(s) ready..."
     fi
