@@ -130,28 +130,167 @@ EOF
 
 echo "MongoDB cluster deployment initiated."
 
-# Step 5: Configure monitoring if installed
+# Wait for the cluster pods to be ready before creating monitoring
 echo ""
-echo -e "${GREEN}Step 5: Configuring monitoring (if installed)...${NC}"
-if kubectl get crd podmonitors.monitoring.coreos.com &> /dev/null; then
+echo -e "${GREEN}Step 5: Waiting for MongoDB pods to be ready...${NC}"
+echo "Waiting for cluster to start (this may take 1-2 minutes)..."
+
+# Wait for all expected pods to exist
+echo "Waiting for all ${MONGO_REPLICAS} pod(s) to be created..."
+for i in {1..120}; do
+    POD_COUNT=$(kubectl get pods -n ${MONGO_NAMESPACE} -l app=${MONGO_CLUSTER_NAME}-svc --no-headers 2>/dev/null | wc -l)
+    if [ "$POD_COUNT" -ge "${MONGO_REPLICAS}" ]; then
+        echo "All ${MONGO_REPLICAS} pod(s) detected."
+        break
+    fi
+    if [ $i -eq 120 ]; then
+        echo -e "${YELLOW}Warning: Only $POD_COUNT of ${MONGO_REPLICAS} pods appeared. Continuing...${NC}"
+    fi
+    sleep 2
+done
+
+# Wait for all pods to be ready and running
+echo "Waiting for all pods to be ready (Running + Ready condition)..."
+WAIT_SUCCESS=false
+for i in {1..120}; do
+    # Get count of Running pods (use || true to prevent set -e from exiting)
+    READY_COUNT=$(kubectl get pods -n ${MONGO_NAMESPACE} -l app=${MONGO_CLUSTER_NAME}-svc --no-headers 2>/dev/null | grep -c "Running" || echo "0")
+
+    if [ "$READY_COUNT" -ge "${MONGO_REPLICAS}" ]; then
+        # Double-check with kubectl wait (protected from set -e)
+        if kubectl wait --for=condition=ready pod -l app=${MONGO_CLUSTER_NAME}-svc -n ${MONGO_NAMESPACE} --timeout=10s >/dev/null 2>&1; then
+            echo "All ${MONGO_REPLICAS} pod(s) are ready!"
+            WAIT_SUCCESS=true
+            break
+        fi
+    fi
+
+    # Show progress every 10 seconds
+    if [ $((i % 5)) -eq 0 ]; then
+        echo "  $READY_COUNT of ${MONGO_REPLICAS} pod(s) ready..."
+    fi
+    sleep 2
+done
+
+if [ "$WAIT_SUCCESS" = false ]; then
+    echo -e "${YELLOW}Warning: Not all pods became ready within the timeout period.${NC}"
+    echo -e "${YELLOW}ServiceMonitor may not be created successfully. Check pod status with:${NC}"
+    echo -e "${YELLOW}  kubectl get pods -n ${MONGO_NAMESPACE}${NC}"
+fi
+
+# Step 6: Configure monitoring
+echo ""
+echo -e "${GREEN}Step 6: Configuring monitoring...${NC}"
+
+# Check if ServiceMonitor CRD exists
+if kubectl get crd servicemonitors.monitoring.coreos.com &> /dev/null; then
+    MONITORING_INSTALLED=true
+    echo "Monitoring stack detected. Creating ServiceMonitor..."
+else
+    MONITORING_INSTALLED=false
+    echo -e "${YELLOW}Note: Monitoring stack not yet installed.${NC}"
+    echo "Creating monitoring configurations that will activate when monitoring is installed..."
+fi
+
+# Deploy MongoDB exporter AFTER pods are ready
+# This prevents issues with the exporter connecting to MongoDB
+if kubectl get crd servicemonitors.monitoring.coreos.com &> /dev/null; then
+    # Deploy MongoDB exporter
     cat <<EOF | kubectl apply -f -
-apiVersion: monitoring.coreos.com/v1
-kind: PodMonitor
+---
+apiVersion: v1
+kind: Service
 metadata:
-  name: ${MONGO_CLUSTER_NAME}-monitor
+  name: mongodb-exporter
   namespace: ${MONGO_NAMESPACE}
   labels:
-    app: mongodb
+    app: mongodb-exporter
+spec:
+  ports:
+  - name: metrics
+    port: 9216
+    targetPort: 9216
+    protocol: TCP
+  selector:
+    app: mongodb-exporter
+  type: ClusterIP
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mongodb-exporter
+  namespace: ${MONGO_NAMESPACE}
+  labels:
+    app: mongodb-exporter
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mongodb-exporter
+  template:
+    metadata:
+      labels:
+        app: mongodb-exporter
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9216"
+        prometheus.io/path: "/metrics"
+    spec:
+      containers:
+      - name: mongodb-exporter
+        image: percona/mongodb_exporter:0.40
+        args:
+        - --mongodb.uri=mongodb://admin:\$(MONGODB_PASSWORD)@${MONGO_CLUSTER_NAME}-svc.${MONGO_NAMESPACE}.svc.cluster.local:27017/admin?replicaSet=${MONGO_CLUSTER_NAME}
+        - --discovering-mode
+        - --collect-all
+        env:
+        - name: MONGODB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: ${MONGO_CLUSTER_NAME}-admin-password
+              key: password
+        ports:
+        - name: metrics
+          containerPort: 9216
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 9216
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 9216
+          initialDelaySeconds: 10
+          periodSeconds: 5
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: mongodb-exporter
+  namespace: ${MONGO_NAMESPACE}
+  labels:
+    app: mongodb-exporter
+    release: monitoring
 spec:
   selector:
     matchLabels:
-      app: ${MONGO_CLUSTER_NAME}-svc
-  podMetricsEndpoints:
-  - port: prometheus
+      app: mongodb-exporter
+  endpoints:
+  - port: metrics
+    interval: 30s
     path: /metrics
 EOF
-    echo "MongoDB monitoring configured."
-    echo "  - Cluster PodMonitor created"
+
+    if [ "$MONITORING_INSTALLED" = true ]; then
+        echo "MongoDB monitoring configured and active."
+        echo "  - MongoDB exporter deployed"
+        echo "  - ServiceMonitor created for Prometheus scraping"
+    else
+        echo -e "${YELLOW}ServiceMonitor resources created successfully.${NC}"
+        echo -e "${YELLOW}Metrics collection will start automatically when you run ./create_mon.sh${NC}"
+    fi
 else
     echo -e "${YELLOW}Warning: Monitoring stack not installed. Metrics collection disabled.${NC}"
     echo -e "${YELLOW}Install monitoring with ./create_mon.sh to enable metrics collection.${NC}"
@@ -166,7 +305,7 @@ echo -e "${YELLOW}Cluster: ${MONGO_CLUSTER_NAME}${NC}"
 echo -e "${YELLOW}Namespace: ${MONGO_NAMESPACE}${NC}"
 echo ""
 echo -e "${YELLOW}Useful commands:${NC}"
-echo "  kubectl get mongodb -n ${MONGO_NAMESPACE}"
+echo "  kubectl get mongodbcommunity -n ${MONGO_NAMESPACE}"
 echo "  kubectl get pods -n ${MONGO_NAMESPACE}"
 echo "  kubectl get pvc -n ${MONGO_NAMESPACE}"
 echo ""
@@ -174,21 +313,20 @@ echo -e "${YELLOW}Access MongoDB:${NC}"
 echo "  kubectl exec -it ${MONGO_CLUSTER_NAME}-0 -n ${MONGO_NAMESPACE} -- mongosh -u admin -p"
 echo ""
 echo -e "${YELLOW}Monitor cluster status:${NC}"
-echo "  kubectl get mongodb -n ${MONGO_NAMESPACE} -w"
+echo "  kubectl get mongodbcommunity -n ${MONGO_NAMESPACE} -w"
 echo ""
 
 # Add Grafana dashboard info if monitoring is installed
-if kubectl get crd podmonitors.monitoring.coreos.com &> /dev/null; then
+if kubectl get crd servicemonitors.monitoring.coreos.com &> /dev/null; then
     HOST_IP=$(kubectl get nodes -o jsonpath='{.items[0].status.addresses[?(@.type=="InternalIP")].address}' 2>/dev/null || hostname -I | awk '{print $1}')
-    echo -e "${YELLOW}Grafana Dashboards:${NC}"
+    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    echo -e "${YELLOW}Grafana Dashboard:${NC}"
     echo "  1. Access Grafana at http://${HOST_IP}:30000"
     echo ""
     echo "  2. In Grafana, go to Dashboards > Import"
-    echo "  3. Choose one of these MongoDB dashboards:"
-    echo "     - Dashboard ID: 2583 (MongoDB Overview)"
-    echo "     - Dashboard ID: 7353 (MongoDB Exporter)"
-    echo "     - Dashboard ID: 12079 (MongoDB)"
-    echo "  4. Select Prometheus datasource and click Import"
+    echo "  3. Click 'Upload JSON file'"
+    echo "  4. Select: ${SCRIPT_DIR}/MongoDB_Percona_Grafana.json"
+    echo "  5. Choose Prometheus datasource and click Import"
     echo ""
 fi
 

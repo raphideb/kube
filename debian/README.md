@@ -22,8 +22,8 @@ These scripts are designed for **native Debian installation** and are used to se
 **Installation Scripts:**
 - `create_all.sh` - All-in-one script to install Kubernetes, PostgreSQL, and MongoDB
 - `create_kube.sh` - Install only Kubernetes cluster infrastructure
-- `create_pg.sh` - Install PostgreSQL operator and deploy cluster (requires Kubernetes)
-- `create_mongodb.sh` - Install MongoDB operator and deploy cluster (requires Kubernetes)
+- `create_pg.sh` - Install PostgreSQL operator and deploy cluster with Grafana support
+- `create_mongodb.sh` - Install MongoDB operator and deploy cluster with Grafana support
 - `create_mon.sh` - Install Prometheus & Grafana monitoring
 - `create_oracle.sh` - Deploy Oracle 23c Free Edition with Grafana support
 - `create_os.sh` - Install OpenSearch operator
@@ -239,13 +239,23 @@ Note: OpenSearch cluster needs to be deployed first with NodePort services (see 
 <img width="3839" height="2159" alt="opensearch" src="https://github.com/user-attachments/assets/a4a3b640-1a94-4f0b-b65b-656ad584448e" />
 
 ### Grafana
-#### PostgresSQL
-Name: CloudNativePG  
+#### PostgreSQL
+Name: CloudNativePG
 Dashboard ID: 20417
 
 <img width="3839" height="2159" alt="grafana" src="https://github.com/user-attachments/assets/8492632b-240e-47bb-afee-df10d5bce5e8" />
 
-### Oracle
+#### MongoDB
+Name: MongoDB - Percona Exporter  
+
+I couldn't make any of the dashboards available on grafana work. Import this custom dashboard into grafana from the repo:  
+```
+MongoDB_Percona_Grafana.json
+```
+
+<!-- Add MongoDB dashboard screenshot here -->
+
+#### Oracle
 Name: OracleDB Monitoring - performance and table space stats  
 Original dashboard ID: 13555
 
