@@ -347,16 +347,30 @@ EOF
 echo "PostgreSQL cluster deployment initiated."
 
 # Wait for PostgreSQL pods to be ready before creating PodMonitor
-echo "Waiting for PostgreSQL pods to be ready (this may take 1-2 minutes)..."
-for i in {1..60}; do
-    if kubectl get pods -n postgres -l cnpg.io/cluster=postgres-cluster 2>/dev/null | grep -q "postgres-cluster"; then
-        echo "  Pods detected, waiting for them to be ready..."
+echo "Waiting for all ${PG_REPLICAS} PostgreSQL pod(s) to be created..."
+for i in {1..120}; do
+    POD_COUNT=$(kubectl get pods -n postgres -l cnpg.io/cluster=postgres-cluster --no-headers 2>/dev/null | wc -l)
+    if [ "$POD_COUNT" -ge "${PG_REPLICAS}" ]; then
+        echo "  All ${PG_REPLICAS} pod(s) detected."
         break
     fi
     sleep 2
 done
-kubectl wait --for=condition=ready pod -l cnpg.io/cluster=postgres-cluster -n postgres --timeout=300s || true
-echo "  PostgreSQL pods are ready."
+
+echo "  Waiting for all pods to be ready (Running + Ready condition)..."
+for i in {1..120}; do
+    READY_COUNT=$(kubectl get pods -n postgres -l cnpg.io/cluster=postgres-cluster --no-headers 2>/dev/null | grep -c "Running")
+    if [ "$READY_COUNT" -ge "${PG_REPLICAS}" ]; then
+        if kubectl wait --for=condition=ready pod -l cnpg.io/cluster=postgres-cluster -n postgres --timeout=10s >/dev/null 2>&1; then
+            echo "  All ${PG_REPLICAS} PostgreSQL pod(s) are ready!"
+            break
+        fi
+    fi
+    if [ $((i % 5)) -eq 0 ]; then
+        echo "    $READY_COUNT of ${PG_REPLICAS} pod(s) ready..."
+    fi
+    sleep 2
+done
 
 # Create PodMonitor for PostgreSQL cluster AFTER pods are ready
 # This prevents silent rejection by the kube-prometheus-stack admission webhook

@@ -102,22 +102,44 @@ echo ""
 echo -e "${GREEN}Step 4: Waiting for PostgreSQL pods to be ready...${NC}"
 echo "Waiting for cluster to start (this may take 1-2 minutes)..."
 
-# Wait for at least one pod to exist
-for i in {1..60}; do
-    if kubectl get pods -n ${PG_NAMESPACE} -l cnpg.io/cluster=${PG_CLUSTER_NAME} 2>/dev/null | grep -q "${PG_CLUSTER_NAME}"; then
-        echo "Pods detected, waiting for them to be ready..."
+# Wait for all expected pods to exist
+echo "Waiting for all ${PG_REPLICAS} pod(s) to be created..."
+for i in {1..120}; do
+    POD_COUNT=$(kubectl get pods -n ${PG_NAMESPACE} -l cnpg.io/cluster=${PG_CLUSTER_NAME} --no-headers 2>/dev/null | wc -l)
+    if [ "$POD_COUNT" -ge "${PG_REPLICAS}" ]; then
+        echo "All ${PG_REPLICAS} pod(s) detected."
         break
     fi
-    if [ $i -eq 60 ]; then
-        echo -e "${YELLOW}Warning: Timeout waiting for pods to appear. Continuing anyway...${NC}"
+    if [ $i -eq 120 ]; then
+        echo -e "${YELLOW}Warning: Only $POD_COUNT of ${PG_REPLICAS} pods appeared. Continuing...${NC}"
     fi
     sleep 2
 done
 
-# Wait for pods to be ready
-kubectl wait --for=condition=ready pod -l cnpg.io/cluster=${PG_CLUSTER_NAME} -n ${PG_NAMESPACE} --timeout=300s || true
+# Wait for all pods to be ready and running
+echo "Waiting for all pods to be ready (Running + Ready condition)..."
+WAIT_SUCCESS=false
+for i in {1..120}; do
+    READY_COUNT=$(kubectl get pods -n ${PG_NAMESPACE} -l cnpg.io/cluster=${PG_CLUSTER_NAME} --no-headers 2>/dev/null | grep -c "Running")
+    if [ "$READY_COUNT" -ge "${PG_REPLICAS}" ]; then
+        # Double-check with kubectl wait
+        if kubectl wait --for=condition=ready pod -l cnpg.io/cluster=${PG_CLUSTER_NAME} -n ${PG_NAMESPACE} --timeout=10s >/dev/null 2>&1; then
+            echo "All ${PG_REPLICAS} pod(s) are ready!"
+            WAIT_SUCCESS=true
+            break
+        fi
+    fi
+    if [ $((i % 5)) -eq 0 ]; then
+        echo "  $READY_COUNT of ${PG_REPLICAS} pod(s) ready..."
+    fi
+    sleep 2
+done
 
-echo "Pods are ready."
+if [ "$WAIT_SUCCESS" = false ]; then
+    echo -e "${YELLOW}Warning: Not all pods became ready within the timeout period.${NC}"
+    echo -e "${YELLOW}PodMonitor may not be created successfully. Check pod status with:${NC}"
+    echo -e "${YELLOW}  kubectl get pods -n ${PG_NAMESPACE}${NC}"
+fi
 
 # Step 5: Configure monitoring
 echo ""
