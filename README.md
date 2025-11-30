@@ -2,6 +2,8 @@
 
 This repository contains scripts to set up a vanilla Kubernetes cluster with various database operators and monitoring tools. 
 
+After you deployed the cluster, read the user guide to get some ideas for what you can do with it: [https://crashdump.info/kubernetes/](https://crashdump.info/kubernetes/)
+
 ## Directory Structure
 
 This repository is organized into two directories based on your target platform:
