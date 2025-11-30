@@ -233,8 +233,7 @@ I couldn't make any of the dashboards available on grafana work. Import this cus
 ```
 MongoDB_Percona_Grafana.json
 ```
-
-<!-- Add MongoDB dashboard screenshot here -->
+![mongodb_grafana](https://github.com/user-attachments/assets/b2082d58-6e2c-41d2-9f75-f830e09fb5c5)
 
 #### Oracle
 Name: OracleDB Monitoring - performance and table space stats  
