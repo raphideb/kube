@@ -97,12 +97,45 @@ EOF
 
 echo "PostgreSQL cluster deployment initiated."
 
-# Step 4: Configure monitoring if installed
+# Wait for the cluster pods to be ready before creating PodMonitor
 echo ""
-echo -e "${GREEN}Step 4: Configuring monitoring (if installed)...${NC}"
+echo -e "${GREEN}Step 4: Waiting for PostgreSQL pods to be ready...${NC}"
+echo "Waiting for cluster to start (this may take 1-2 minutes)..."
+
+# Wait for at least one pod to exist
+for i in {1..60}; do
+    if kubectl get pods -n ${PG_NAMESPACE} -l cnpg.io/cluster=${PG_CLUSTER_NAME} 2>/dev/null | grep -q "${PG_CLUSTER_NAME}"; then
+        echo "Pods detected, waiting for them to be ready..."
+        break
+    fi
+    if [ $i -eq 60 ]; then
+        echo -e "${YELLOW}Warning: Timeout waiting for pods to appear. Continuing anyway...${NC}"
+    fi
+    sleep 2
+done
+
+# Wait for pods to be ready
+kubectl wait --for=condition=ready pod -l cnpg.io/cluster=${PG_CLUSTER_NAME} -n ${PG_NAMESPACE} --timeout=300s || true
+
+echo "Pods are ready."
+
+# Step 5: Configure monitoring
+echo ""
+echo -e "${GREEN}Step 5: Configuring monitoring...${NC}"
+
+# Check if PodMonitor CRD exists
 if kubectl get crd podmonitors.monitoring.coreos.com &> /dev/null; then
-    # Create PodMonitor for the PostgreSQL cluster
-    cat <<EOF | kubectl apply -f -
+    MONITORING_INSTALLED=true
+    echo "Monitoring stack detected. Creating PodMonitors..."
+else
+    MONITORING_INSTALLED=false
+    echo -e "${YELLOW}Note: Monitoring stack not yet installed.${NC}"
+    echo "Creating PodMonitor configurations that will activate when monitoring is installed..."
+fi
+
+# Create PodMonitor for the PostgreSQL cluster AFTER pods are ready
+# This prevents silent rejection by the kube-prometheus-stack admission webhook
+cat <<EOF | kubectl apply -f -
 apiVersion: monitoring.coreos.com/v1
 kind: PodMonitor
 metadata:
@@ -123,8 +156,12 @@ spec:
     interval: 30s
 EOF
 
-    # Create PodMonitor for the CloudNativePG operator
-    cat <<EOF | kubectl apply -f -
+# Always create PodMonitor for the CloudNativePG operator (if not in postgres namespace)
+# Only create if we're deploying to a different namespace than postgres
+if [ "${PG_NAMESPACE}" != "postgres" ]; then
+    # Check if operator PodMonitor already exists
+    if ! kubectl get podmonitor cnpg-operator -n postgres &> /dev/null; then
+        cat <<EOF | kubectl apply -f -
 apiVersion: monitoring.coreos.com/v1
 kind: PodMonitor
 metadata:
@@ -142,13 +179,16 @@ spec:
   podMetricsEndpoints:
   - port: metrics
 EOF
+    fi
+fi
 
-    echo "PostgreSQL monitoring configured."
-    echo "  - Cluster PodMonitor created"
-    echo "  - Operator PodMonitor created"
+if [ "$MONITORING_INSTALLED" = true ]; then
+    echo "PostgreSQL monitoring configured and active."
+    echo "  - Cluster PodMonitor created in ${PG_NAMESPACE} namespace"
+    [ "${PG_NAMESPACE}" != "postgres" ] && echo "  - Operator PodMonitor verified in postgres namespace"
 else
-    echo -e "${YELLOW}Warning: Monitoring stack not installed. Metrics collection disabled.${NC}"
-    echo -e "${YELLOW}Install monitoring with ./create_mon.sh to enable metrics collection.${NC}"
+    echo -e "${YELLOW}PodMonitor resources created successfully.${NC}"
+    echo -e "${YELLOW}Metrics collection will start automatically when you run ./create_mon.sh${NC}"
 fi
 
 echo ""

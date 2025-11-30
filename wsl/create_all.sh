@@ -344,7 +344,65 @@ spec:
     storageClass: local-path
 EOF
 
-echo "PostgreSQL cluster deployment initiated. Use 'kubectl get clusters -n postgres' to monitor."
+echo "PostgreSQL cluster deployment initiated."
+
+# Wait for PostgreSQL pods to be ready before creating PodMonitor
+echo "Waiting for PostgreSQL pods to be ready (this may take 1-2 minutes)..."
+for i in {1..60}; do
+    if kubectl get pods -n postgres -l cnpg.io/cluster=postgres-cluster 2>/dev/null | grep -q "postgres-cluster"; then
+        echo "  Pods detected, waiting for them to be ready..."
+        break
+    fi
+    sleep 2
+done
+kubectl wait --for=condition=ready pod -l cnpg.io/cluster=postgres-cluster -n postgres --timeout=300s || true
+echo "  PostgreSQL pods are ready."
+
+# Create PodMonitor for PostgreSQL cluster AFTER pods are ready
+# This prevents silent rejection by the kube-prometheus-stack admission webhook
+cat <<EOF | kubectl apply -f -
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: postgres-cluster
+  namespace: postgres
+  labels:
+    cnpg.io/cluster: postgres-cluster
+spec:
+  namespaceSelector:
+    matchNames:
+    - postgres
+  selector:
+    matchLabels:
+      cnpg.io/cluster: postgres-cluster
+  podMetricsEndpoints:
+  - port: metrics
+    path: /metrics
+    interval: 30s
+EOF
+
+# Create PodMonitor for the CloudNativePG operator
+cat <<EOF | kubectl apply -f -
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: cnpg-operator
+  namespace: postgres
+  labels:
+    app.kubernetes.io/name: cloudnative-pg
+spec:
+  namespaceSelector:
+    matchNames:
+    - postgres
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: cloudnative-pg
+  podMetricsEndpoints:
+  - port: metrics
+EOF
+
+echo "PodMonitor resources created (will activate when monitoring stack is installed)."
+echo "Use 'kubectl get clusters -n postgres' to monitor cluster status."
 
 echo ""
 echo -e "${GREEN}Step 16: Installing MongoDB operator...${NC}"
