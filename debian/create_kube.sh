@@ -351,6 +351,29 @@ else
 fi
 
 echo ""
+echo -e "${GREEN}Step 12: Installing Metrics Server...${NC}"
+if ! kubectl get deployment metrics-server -n kube-system &> /dev/null; then
+    kubectl apply -f https://github.com/kubernetes-sigs/metrics-server/releases/latest/download/components.yaml
+
+    echo "Waiting for metrics-server deployment to be created..."
+    sleep 5
+
+    # Patch metrics-server to skip TLS verification (common for self-hosted clusters)
+    kubectl patch deployment metrics-server -n kube-system --type='json' -p='[{"op": "add", "path": "/spec/template/spec/containers/0/args/-", "value": "--kubelet-insecure-tls"}]'
+
+    echo "Waiting for metrics-server to be ready..."
+    kubectl wait --for=condition=ready pod -l k8s-app=metrics-server -n kube-system --timeout=120s
+
+    # Wait a bit for metrics to be available
+    echo "Waiting for metrics to become available..."
+    sleep 10
+
+    echo "Metrics Server installed and ready."
+else
+    echo "Metrics Server already installed."
+fi
+
+echo ""
 echo -e "${GREEN}========================================${NC}"
 echo -e "${GREEN}Kubernetes Cluster Setup Complete!${NC}"
 echo -e "${GREEN}========================================${NC}"
@@ -358,6 +381,8 @@ echo ""
 echo -e "${YELLOW}Useful commands:${NC}"
 echo "  kubectl get nodes"
 echo "  kubectl get pods --all-namespaces"
+echo "  kubectl top pods -A"
+echo "  kubectl top nodes"
 echo "  kubectl get pv"
 echo "  kubectl get storageclass"
 echo ""

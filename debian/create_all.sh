@@ -373,13 +373,36 @@ else
 fi
 
 echo ""
-echo -e "${GREEN}Step 12: Creating namespaces...${NC}"
+echo -e "${GREEN}Step 12: Installing Metrics Server...${NC}"
+if ! kubectl get deployment metrics-server -n kube-system &> /dev/null; then
+    kubectl apply -f https://github.com/kubernetes-sigs/metrics-server/releases/latest/download/components.yaml
+
+    echo "Waiting for metrics-server deployment to be created..."
+    sleep 5
+
+    # Patch metrics-server to skip TLS verification (common for self-hosted clusters)
+    kubectl patch deployment metrics-server -n kube-system --type='json' -p='[{"op": "add", "path": "/spec/template/spec/containers/0/args/-", "value": "--kubelet-insecure-tls"}]'
+
+    echo "Waiting for metrics-server to be ready..."
+    kubectl wait --for=condition=ready pod -l k8s-app=metrics-server -n kube-system --timeout=120s
+
+    # Wait a bit for metrics to be available
+    echo "Waiting for metrics to become available..."
+    sleep 10
+
+    echo "Metrics Server installed and ready."
+else
+    echo "Metrics Server already installed."
+fi
+
+echo ""
+echo -e "${GREEN}Step 13: Creating namespaces...${NC}"
 kubectl create namespace postgres --dry-run=client -o yaml | kubectl apply -f -
 kubectl create namespace mongodb --dry-run=client -o yaml | kubectl apply -f -
 echo "Namespaces created."
 
 echo ""
-echo -e "${GREEN}Step 13: Installing CloudNativePG operator...${NC}"
+echo -e "${GREEN}Step 14: Installing CloudNativePG operator...${NC}"
 if ! helm list -n postgres | grep -q cnpg-operator; then
     helm repo add cnpg https://cloudnative-pg.github.io/charts
     helm repo update
@@ -396,7 +419,7 @@ else
 fi
 
 echo ""
-echo -e "${GREEN}Step 14: Deploying PostgreSQL cluster...${NC}"
+echo -e "${GREEN}Step 15: Deploying PostgreSQL cluster...${NC}"
 cat <<EOF | kubectl apply -f -
 apiVersion: postgresql.cnpg.io/v1
 kind: Cluster
@@ -489,7 +512,7 @@ echo "PodMonitor resources created (will activate when monitoring stack is insta
 echo "Use 'kubectl get clusters -n postgres' to monitor cluster status."
 
 echo ""
-echo -e "${GREEN}Step 15: Installing MongoDB operator...${NC}"
+echo -e "${GREEN}Step 16: Installing MongoDB operator...${NC}"
 if ! helm list -n mongodb | grep -q mongodb-operator; then
     helm repo add mongodb https://mongodb.github.io/helm-charts
     helm repo update
@@ -504,14 +527,14 @@ else
 fi
 
 echo ""
-echo -e "${GREEN}Step 16: Creating MongoDB admin password secret...${NC}"
+echo -e "${GREEN}Step 17: Creating MongoDB admin password secret...${NC}"
 kubectl create secret generic mongodb-admin-password \
     --from-literal="password=${MONGO_PASSWORD}" \
     --namespace mongodb \
     --dry-run=client -o yaml | kubectl apply -f -
 
 echo ""
-echo -e "${GREEN}Step 17: Deploying MongoDB cluster...${NC}"
+echo -e "${GREEN}Step 18: Deploying MongoDB cluster...${NC}"
 cat <<EOF | kubectl apply -f -
 apiVersion: mongodbcommunity.mongodb.com/v1
 kind: MongoDBCommunity
@@ -559,6 +582,8 @@ echo ""
 echo -e "${YELLOW}Useful commands:${NC}"
 echo "  kubectl get nodes"
 echo "  kubectl get pods --all-namespaces"
+echo "  kubectl top pods -A"
+echo "  kubectl top nodes"
 echo "  kubectl get clusters -n postgres"
 echo "  kubectl get mongodb -n mongodb"
 echo "  kubectl get pv"

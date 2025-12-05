@@ -105,7 +105,8 @@ echo "Waiting for cluster to start (this may take 1-2 minutes)..."
 # Wait for all expected pods to exist
 echo "Waiting for all ${PG_REPLICAS} pod(s) to be created..."
 for i in {1..120}; do
-    POD_COUNT=$(kubectl get pods -n ${PG_NAMESPACE} -l cnpg.io/cluster=${PG_CLUSTER_NAME} --no-headers 2>/dev/null | wc -l)
+    POD_COUNT=$(kubectl get pods -n ${PG_NAMESPACE} -l cnpg.io/cluster=${PG_CLUSTER_NAME} --no-headers 2>/dev/null | wc -l | head -1)
+    POD_COUNT=${POD_COUNT:-0}
     if [ "$POD_COUNT" -ge "${PG_REPLICAS}" ]; then
         echo "All ${PG_REPLICAS} pod(s) detected."
         break
@@ -120,8 +121,10 @@ done
 echo "Waiting for all pods to be ready (Running + Ready condition)..."
 WAIT_SUCCESS=false
 for i in {1..120}; do
-    # Get count of Running pods (use || true to prevent set -e from exiting)
+    # Get count of Running pods (use || echo "0" to prevent set -e from exiting)
     READY_COUNT=$(kubectl get pods -n ${PG_NAMESPACE} -l cnpg.io/cluster=${PG_CLUSTER_NAME} --no-headers 2>/dev/null | grep -c "Running" || echo "0")
+    READY_COUNT=$(echo "$READY_COUNT" | head -1)
+    READY_COUNT=${READY_COUNT:-0}
 
     if [ "$READY_COUNT" -ge "${PG_REPLICAS}" ]; then
         # Double-check with kubectl wait (protected from set -e)

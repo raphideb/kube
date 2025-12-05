@@ -8,7 +8,7 @@ metadata:
 type: Opaque
 stringData:
   username: admin
-  password: "OpenSearch123!"
+  password: "admin"
 
 ---
 # OpenSearch Cluster with 3 nodes and Dashboards
