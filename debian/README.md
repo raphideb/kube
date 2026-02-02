@@ -10,7 +10,8 @@ These scripts are designed for **native Debian installation** and are used to se
 **Database Operators and Deployments:**
 
 - CloudNative-PG operator with cnpg plugin and deployment of a sample DB
-- MongoDB operator and deployment of a sample DB
+- MongoDB Community operator and deployment of a sample DB
+- Percona MongoDB operator and deployment of a sample DB
 - Oracle operator and deployment of a sample DB
 
 **Monitoring and Search:**
@@ -23,14 +24,16 @@ These scripts are designed for **native Debian installation** and are used to se
 - `create_all.sh` - All-in-one script to install Kubernetes, PostgreSQL, and MongoDB
 - `create_kube.sh` - Install only Kubernetes cluster infrastructure
 - `create_pg.sh` - Install PostgreSQL operator and deploy cluster with Grafana support
-- `create_mongodb.sh` - Install MongoDB operator and deploy cluster with Grafana support
+- `create_mongodb.sh` - Install MongoDB Community operator and deploy cluster with Grafana support
+- `create_percona_mongodb.sh` - Install Percona MongoDB operator and deploy cluster with Grafana support
 - `create_mon.sh` - Install Prometheus & Grafana monitoring
 - `create_oracle.sh` - Deploy Oracle 23c Free Edition with Grafana support
 - `create_os.sh` - Install OpenSearch operator
 
 **YAML files for deploying additional clusters:**
 - `pg-cluster.yml` - PostgreSQL cluster with Grafana support
-- `mongodb.yml` - MongoDB cluster
+- `mongodb.yml` - MongoDB Community cluster
+- `percona_mongodb.yml` - Percona MongoDB cluster
 - `opensearch.yml` - OpenSearch cluster with dashboard
 
 **Important**
@@ -56,9 +59,10 @@ If any packages (curl, wget) are missing that are not covered by the install scr
 ./create_kube.sh    # 1. Setup Kubernetes
 ./create_mon.sh     # 2. Install Prometheus & Grafana (optional but recommended)
 ./create_pg.sh      # 3. Deploy PostgreSQL (auto-configures monitoring if available)
-./create_mongodb.sh # 4. Deploy MongoDB (auto-configures monitoring if available)
-./create_oracle.sh  # 5. Deploy Oracle (auto-configures monitoring if available)
-./create_os.sh      # 6. Install OpenSearch operator
+./create_mongodb.sh         # 4a. Deploy MongoDB Community (auto-configures monitoring if available)
+./create_percona_mongodb.sh # 4b. Deploy Percona MongoDB (alternative to 4a)
+./create_oracle.sh          # 5. Deploy Oracle (auto-configures monitoring if available)
+./create_os.sh              # 6. Install OpenSearch operator
 ```
 
 **Note:** Scripts after create_kube.sh work in any order. Each database script auto-configures its own monitoring if the monitoring stack is installed.
@@ -102,6 +106,12 @@ If you want to delete everything from Oracle, run:
 ./del_oracle.sh
 ```
 
+**Delete Percona MongoDB deployment**
+
+```
+./del_percona.sh
+```
+
 **Service Access**
 
 Grafana and Prometheus are automatically exposed as NodePort services and permanently accessible at:
@@ -143,18 +153,34 @@ sudo systemctl stop kubelet cri-docker docker
 
 ## Deploy more clusters
 If you ran `create_all.sh` or the individual database deployment scripts (`create_pg.sh` and `create_mongodb.sh`), you already have sample PostgreSQL and MongoDB clusters deployed. To deploy additional database clusters, simply run:
+
+**MongoDB Community Edition:**
+
 ```
 kubectl apply -f mongodb.yml
+```
+
+**Percona MongoDB:**
+
+```
+kubectl apply -f percona_mongodb.yml
+```
+
+**PostgreSQL:**
+
+```
 kubectl apply -f pg-cluster.yml
 ```
+
 You can use these yml files as a template to play around. If you want to access the databases with mongosh or psql, you will need to forward the ports as well. Just add the commands to portfw.sh, adjust the names/ports to your settings:
 ```
-kubectl port-forward -n mongodb svc/raphi-mongodb-svc 27017:27017 &
-kubectl port-forward -n postgres svc/pg-raphi-rw 5432:5432 &
+kubectl port-forward -n mongodb svc/mongodb-cluster-svc 27017:27017 &
+kubectl port-forward -n percona-mongodb svc/percona-mongodb-rs0 27017:27017 &
+kubectl port-forward -n postgres svc/postgres-cluster-rw 5432:5432 &
 ```
 If you already have a local installation of mongodb or postgres, change the destination port (the first number), for example:
 ```
-kubectl port-forward -n postgres svc/pg-raphi-rw 54320:5432 &
+kubectl port-forward -n postgres svc/postgres-cluster-rw 54320:5432 &
 ```
 ### Deploy more oracle databases
 For oracle, additional steps are needed to setup the credentials and proper labeling for grafana, which is why a bash script is more suitable. Basic usage is:
@@ -163,7 +189,7 @@ For oracle, additional steps are needed to setup the credentials and proper labe
 ```
 However the sid has to be FREE for the free edition. Example:
 ```
-./deploy-oracle.sh raphiora FREE MySecret_123
+./deploy-oracle.sh myoracledb FREE MySecret_123
 ```
 
 ## Access
@@ -171,29 +197,43 @@ All pods can be directly accessed with kubectl. First get a list of your pods:
 ```
 kubectl get pods -n postgres
 kubectl get pods -n mongodb
+kubectl get pods -n percona-mongodb
 kubectl get pods -n opensearch
 kubectl get pods -n oracle
 ```
 And then login with:
 ```
-kubectl exec -it pg-raphi-1 -n postgres -- bash
-kubectl exec -it raphi-mongodb-0 -n mongodb -- bash
-kubectl exec -it raphiora-z9e4b -n oracle -- sqlplus sys/MySecret_123@FREE as sysdba
+kubectl exec -it postgres-cluster-1 -n postgres -- bash
+kubectl exec -it mongodb-cluster-0 -n mongodb -- bash
+kubectl exec -it myoracledb-z9e4b -n oracle -- sqlplus sys/MySecret_123@FREE as sysdba
 ```
 ### Postgres
 The easiest way to connect to postgres is through cnpg plugin:
 ```
-kubectl cnpg psql pg-raphi -n postgres
+kubectl cnpg psql postgres-cluster -n postgres
 ```
 Or use psql with the port you are forwarding to:
 ```
 psql -h localhost -p 54320 -U postgres postgres
 ```
 
-### Mongodb
+### MongoDB (Community Edition)
+
 With mongosh, password is in mongodb.yml if you haven't changed it yet:
 ```
-mongosh -u raphi mongodb://localhost:27017/raphi-db
+mongosh -u admin mongodb://localhost:27017/admin
+```
+
+### MongoDB (Percona)
+
+With mongosh, password is in percona_mongodb.yml if you haven't changed it yet:
+```
+kubectl exec -it percona-mongodb-rs0-0 -n percona-mongodb -- mongosh -u userAdmin -p
+```
+
+Or with port-forwarding:
+```
+mongosh -u userAdmin mongodb://localhost:27017/admin
 ```
 
 ### Oracle
@@ -204,18 +244,18 @@ Usage: orasql <database-name> [namespace]
 
 Available databases:
 oracle23    Healthy   FREE
-raphiora    Healthy   FREE
+myoracledb  Healthy   FREE
 ```
 Example:
 ```
-./orasql raphiora
+./orasql myoracledb
 ```
 
 Alternatively, you can list the available databases, get the corresponding pod and login with password on the commandline:
 ```
 kubectl get singleinstancedatabase -n oracle
-kubectl get pods -n oracle -l app=raphiora -o jsonpath='{.items[0].metadata.name}'
-kubectl exec -it raphiora-z9e4b -n oracle -- sqlplus sys/HomePW_12345@FREE as sysdba
+kubectl get pods -n oracle -l app=myoracledb -o jsonpath='{.items[0].metadata.name}'
+kubectl exec -it myoracledb-z9e4b -n oracle -- sqlplus sys/MySecret_12345@FREE as sysdba
 ```
 
 ### Grafana
@@ -268,9 +308,9 @@ OracleDB_Grafana.json
 ### prometheus node exporter
 If the node export pod keeps crashing, check the log files:
 ```
-raphi@plexus:~$ kubectl get pods -n monitoring |grep node-exporter
+$ kubectl get pods -n monitoring |grep node-exporter
 kube-prometheus-stack-prometheus-node-exporter-xbzrm        0/1     CrashLoopBackOff   24 (51s ago)   29h
-raphi@plexus:~$ kubectl describe pods -n monitoring kube-prometheus-stack-prometheus-node-exporter-xbzrm
+$ kubectl describe pods -n monitoring kube-prometheus-stack-prometheus-node-exporter-xbzrm
 ```
 If you see lines like this one:
 ```

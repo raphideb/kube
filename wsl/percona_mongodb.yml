@@ -1,0 +1,60 @@
+---
+# Secret for Percona MongoDB users
+# The Percona operator requires specific user keys in the secret
+apiVersion: v1
+kind: Secret
+metadata:
+  name: raphi-percona-mongodb-secrets
+  namespace: percona-mongodb
+type: Opaque
+stringData:
+  MONGODB_BACKUP_USER: backup
+  MONGODB_BACKUP_PASSWORD: "ChangeMe123!"
+  MONGODB_CLUSTER_ADMIN_USER: clusterAdmin
+  MONGODB_CLUSTER_ADMIN_PASSWORD: "ChangeMe123!"
+  MONGODB_CLUSTER_MONITOR_USER: clusterMonitor
+  MONGODB_CLUSTER_MONITOR_PASSWORD: "ChangeMe123!"
+  MONGODB_USER_ADMIN_USER: userAdmin
+  MONGODB_USER_ADMIN_PASSWORD: "ChangeMe123!"  # Change all passwords above
+
+---
+# Percona Server for MongoDB cluster
+apiVersion: psmdb.percona.com/v1
+kind: PerconaServerMongoDB
+metadata:
+  name: raphi-percona-mongodb
+  namespace: percona-mongodb
+  finalizers:
+    - percona.com/delete-psmdb-pods-in-order
+spec:
+  crVersion: "1.18.0"
+  image: percona/percona-server-mongodb:7.0
+  imagePullPolicy: IfNotPresent
+
+  secrets:
+    users: raphi-percona-mongodb-secrets
+
+  replsets:
+    - name: rs0
+      size: 3
+      affinity:
+        antiAffinityTopologyKey: "none"
+      podDisruptionBudget:
+        maxUnavailable: 1
+      expose:
+        enabled: false
+        type: ClusterIP
+      volumeSpec:
+        persistentVolumeClaim:
+          storageClassName: local-path
+          accessModes: ["ReadWriteOnce"]
+          resources:
+            requests:
+              storage: 5Gi
+
+  sharding:
+    enabled: false
+
+  backup:
+    enabled: false
+    image: percona/percona-backup-mongodb:2.8.0
