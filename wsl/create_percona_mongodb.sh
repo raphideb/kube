@@ -120,8 +120,8 @@ metadata:
   finalizers:
     - percona.com/delete-psmdb-pods-in-order
 spec:
-  crVersion: "1.18.0"
-  image: percona/percona-server-mongodb:7.0
+  crVersion: "1.21.2"
+  image: percona/percona-server-mongodb:8.0.17-6
   imagePullPolicy: IfNotPresent
   secrets:
     users: ${MONGO_CLUSTER_NAME}-secrets
@@ -146,7 +146,7 @@ spec:
     enabled: false
   backup:
     enabled: false
-    image: percona/percona-backup-mongodb:2.8.0
+    image: percona/percona-backup-mongodb:2.11.0
 EOF
 
 echo "Percona MongoDB cluster deployment initiated."
@@ -331,7 +331,7 @@ echo "  kubectl get pods -n ${MONGO_NAMESPACE}"
 echo "  kubectl get pvc -n ${MONGO_NAMESPACE}"
 echo ""
 echo -e "${YELLOW}Access MongoDB:${NC}"
-echo "  kubectl exec -it ${MONGO_CLUSTER_NAME}-rs0-0 -n ${MONGO_NAMESPACE} -- mongosh -u userAdmin -p"
+echo "  kubectl exec -it ${MONGO_CLUSTER_NAME}-rs0-0 -n ${MONGO_NAMESPACE} -- mongosh -u clusterAdmin -p"
 echo ""
 echo -e "${YELLOW}Monitor cluster status:${NC}"
 echo "  kubectl get psmdb -n ${MONGO_NAMESPACE} -w"

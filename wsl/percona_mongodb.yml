@@ -27,8 +27,8 @@ metadata:
   finalizers:
     - percona.com/delete-psmdb-pods-in-order
 spec:
-  crVersion: "1.18.0"
-  image: percona/percona-server-mongodb:7.0
+  crVersion: "1.21.2"
+  image: percona/percona-server-mongodb:8.0.17-6
   imagePullPolicy: IfNotPresent
 
   secrets:
@@ -57,4 +57,4 @@ spec:
 
   backup:
     enabled: false
-    image: percona/percona-backup-mongodb:2.8.0
+    image: percona/percona-backup-mongodb:2.11.0
